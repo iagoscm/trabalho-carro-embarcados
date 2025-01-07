@@ -1,6 +1,8 @@
 mod i2c;
 mod uart;
 
-fn main() {
+use uart::modbus::temp_motor;
 
+fn main() {
+  temp_motor();
 }
