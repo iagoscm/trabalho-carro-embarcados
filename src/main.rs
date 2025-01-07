@@ -1,3 +1,6 @@
+mod i2c;
+mod uart;
+
 fn main() {
-    println!("Hello, world!");
+
 }
