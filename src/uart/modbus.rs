@@ -32,13 +32,33 @@ pub fn temp_motor() {
     let float_bytes = &leitura[3..7];
     let float_value = f32::from_le_bytes(float_bytes.try_into().expect("Falha na conversão para f32"));
     println!("Valor do float: {}", float_value);
-    //let mut leitura = vec![0; 255]; // Define 255 caracteres de leitura
-    //println!("Leu {} bytes ", bytes_lidos);
+    drop(uarto);
+}
 
-    // Converte o buffer para string
-    //let to_str_buffer = str::from_utf8(&leitura[0..bytes_lidos]).expect("Não foi possível converter buffer para string").trim_matches(char::from(0));
-    //println!("Bytes da leitura: {}", to_str_buffer);
+pub fn liga_seta_esquerda() {
+    let mut uarto = Uart::new(BAUD_RATE, Parity::None, DATA_BITS, STOP_BITS).unwrap();
+    uarto.set_read_mode(1, Duration::from_secs(1)).unwrap();
 
-    // Fecha a porta serial
+    let mut envia = Vec::with_capacity(11);
+    envia.push(0x01);
+    envia.push(0x03);
+    envia.push(0x00);
+    envia.push(1); // quantidade de dados a ler
+    envia.extend_from_slice(&[5,0,0,7]);
+    envia.push(0x01); // esquerda
+
+    // eu tenho que mandar a quantidade??? como eu vou saber pra qual seta eu vou direcionar??
+    // o retorno vem os bytes e a quantidade?? como eu sei se é pra piscar ou não?
+
+    let crc = crc::hash(&envia);
+    envia.extend(&crc.to_le_bytes());
+
+    uarto.write(envia.as_slice()).unwrap(); // Envia mensagem via tx
+
+    sleep(Duration::from_secs(1));
+
+    let mut leitura = vec![0; 255];
+    let bytes_lidos = uarto.read(&mut leitura).unwrap(); // Lê buffer 255 caracteres da porta rx
+    println!("Valor do float: {}", bytes_lidos);
     drop(uarto);
 }
