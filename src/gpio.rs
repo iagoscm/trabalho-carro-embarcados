@@ -1,5 +1,6 @@
 use rppal::gpio::Gpio;
 use std::thread;
+use std::time::Duration;
 
 // #define Motor_DIR1         RPI_V2_GPIO_P1_11 // BCM 17 
 // #define Motor_DIR2         RPI_V2_GPIO_P1_12 // BCM 18
@@ -32,3 +33,23 @@ const LUZ_FREIO: u8 = 25;
 const LUZ_SETA_ESQ: u8 = 8;
 const LUZ_SETA_DIR: u8 = 7;
 const LUZ_TEMP_MOTOR: u8 = 12;
+
+pub fn pisca() {
+  // Inicializa a instância de GPIO, isso realiza algumas checagens de permissão
+  let gpio = Gpio::new()
+      .expect("Erro ao configurar GPIO, o programa está sendo executado em uma raspberry pi?");
+
+  // Obtém o pino 17 e o configura como saída em nível baixo, pode falhar se o pino estiver ocupado
+  let mut pin = gpio
+      .get(LUZ_SETA_ESQ)
+      .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", LUZ_SETA_ESQ).as_str())
+      .into_output_low();
+
+  loop {
+      pin.set_high();
+      thread::sleep(Duration::from_millis(500));
+
+      pin.set_low();
+      thread::sleep(Duration::from_millis(500));
+  }
+}
