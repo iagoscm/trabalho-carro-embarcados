@@ -17,30 +17,35 @@ use std::time::Duration;
 // #define Luz_Seta_Esq       RPI_V2_GPIO_P1_24 // BCM 8 
 // #define Luz_Seta_Dir       RPI_V2_GPIO_P1_26 // BCM 7 
 // #define Luz_Temp_Motor     RPI_V2_GPIO_P1_32 // BCM 12 
+pub mod gpio {
+  const MOTOR_DIR1: u8 = 17;
+  const MOTOR_DIR2: u8 = 18;
+  const MOTOR_POT: u8 = 23;
+  const FREIO_INT: u8 = 24;
+  const PEDAL_AC: u8 = 27;
+  const PEDAL_FR: u8 = 22;
+  const SENSOR_HALL_MOTOR: u8 = 11;
+  const SENSOR_HALL_RODA_A: u8 = 5;
+  const SENSOR_HALL_RODA_B: u8 = 6;
+  const FAROL_BAIXO: u8 = 19;
+  const FAROL_ALTO: u8 = 26;
+  const LUZ_FREIO: u8 = 25;
+  const LUZ_SETA_ESQ: u8 = 8;
+  const LUZ_SETA_DIR: u8 = 7;
+  const LUZ_TEMP_MOTOR: u8 = 12;
+}
 
-const MOTOR_DIR1: u8 = 17;
-const MOTOR_DIR2: u8 = 18;
-const MOTOR_POT: u8 = 23;
-const FREIO_INT: u8 = 24;
-const PEDAL_AC: u8 = 27;
-const PEDAL_FR: u8 = 22;
-const SENSOR_HALL_MOTOR: u8 = 11;
-const SENSOR_HALL_RODA_A: u8 = 5;
-const SENSOR_HALL_RODA_B: u8 = 6;
-const FAROL_BAIXO: u8 = 19;
-const FAROL_ALTO: u8 = 26;
-const LUZ_FREIO: u8 = 25;
-const LUZ_SETA_ESQ: u8 = 8;
-const LUZ_SETA_DIR: u8 = 7;
-const LUZ_TEMP_MOTOR: u8 = 12;
+pub mod constants {
+  pub const RODA_DIAMETRO: f32 = 63.0;
+  pub const MOTOR_TEMP_LIMITE: f32 = 115.0;
+  pub const CRUISE_CONTROL_PASSO: f32 = 1.0;
+}
 
 pub fn pisca() {
-  // Inicializa a instância de GPIO, isso realiza algumas checagens de permissão
   let gpio = Gpio::new()
       .expect("Erro ao configurar GPIO, o programa está sendo executado em uma raspberry pi?");
 
-  // Obtém o pino 17 e o configura como saída em nível baixo, pode falhar se o pino estiver ocupado
-  let mut pin = gpio
+  let mut pin = gpio   // obtém o pino 17 e o configura como saída em nível baixo
       .get(LUZ_SETA_ESQ)
       .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", LUZ_SETA_ESQ).as_str())
       .into_output_low();

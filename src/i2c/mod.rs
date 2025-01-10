@@ -1,4 +1,4 @@
-pub mod bme280;
+pub mod bmp280;
 
 #[cfg(test)]
 mod tests;
