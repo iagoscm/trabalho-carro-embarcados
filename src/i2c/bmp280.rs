@@ -1,4 +1,4 @@
-use crate::uart::esp32::Car;
+/*use crate::uart::esp32::Car;
 use std::{
     fs::read_to_string,
     io::{Error, ErrorKind::InvalidData},
@@ -20,3 +20,4 @@ pub fn measure_temperature(car: Car) -> Result<f32, Error> {
 Ok((((in_temp_input / 1000.0) * 100.0) + 0.5) / 100.0)
 
 }
+*/
