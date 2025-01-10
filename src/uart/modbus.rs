@@ -1,13 +1,143 @@
-
+use crate::uart::crc;
 use std::thread::sleep;
 use std::time::Duration;
-use crate::uart::crc;
-
 use rppal::uart::{Parity, Uart};
 
 const BAUD_RATE: u32 = 115200;
 const DATA_BITS: u8 = 8;
 const STOP_BITS: u8 = 1;
+
+const SOURCE_ADDRESS: u8 = 0x00;
+const TARGET_ADDRESS: u8 = 0x01;
+const REGISTER_CODE: [u8; 4] = [3, 7, 4, 3];
+
+pub const LE_TEMP: ModbusOperation = ModbusOperation {
+    code: 0x23,
+    subcode: 0xAA,
+    qtd: None,
+};
+
+pub const CONTROL_SETA_ESQUERDA: ModbusOperation = ModbusOperation {
+    code: 0x00,
+    subcode: 0x01,  // seta à esquerda
+    qtd: Some(1),
+};
+
+pub const CONTROL_SETA_DIREITA: ModbusOperation = ModbusOperation {
+    code: 0x00,
+    subcode: 0x02,  // seta à direita
+    qtd: Some(1),
+};
+
+pub const CONTROL_CRUISE_RESUME: ModbusOperation = ModbusOperation {
+    code: 0x01,
+    subcode: 0x01,  // RES
+    qtd: Some(1),
+};
+
+pub const CONTROL_CRUISE_CANCEL: ModbusOperation = ModbusOperation {
+    code: 0x01,
+    subcode: 0x02,  // CANCEL
+    qtd: Some(1),
+};
+
+pub const CONTROL_CRUISE_SET_PLUS: ModbusOperation = ModbusOperation {
+    code: 0x01,
+    subcode: 0x04,  // Set + 
+    qtd: Some(1),
+};
+
+pub const CONTROL_CRUISE_SET_MINUS: ModbusOperation = ModbusOperation {
+    code: 0x01,
+    subcode: 0x10,  // Set - 
+    qtd: Some(1),
+};
+
+pub const FAROL_ALTO: ModbusOperation = ModbusOperation {
+    code: 0x02,
+    subcode: 0x01,  // Set - 
+    qtd: Some(1),
+};
+
+pub const FAROL_BAIXO: ModbusOperation = ModbusOperation {
+    code: 0x02,
+    subcode: 0x02,  // Set - 
+    qtd: Some(1),
+};
+
+#[allow(non_snake_case)]
+pub fn READ_REGISTERS(address: u8, qtd: u8) -> ModbusOperation {
+    ModbusOperation {
+        code: 0x03,
+        subcode: address,
+        qtd: Some(qtd),
+    }
+}
+
+#[allow(non_snake_case)]
+pub fn WRITE_REGISTERS(address: u8, qtd: u8) -> ModbusOperation {
+    ModbusOperation {
+        code: 0x06,
+        subcode: address,
+        qtd: Some(qtd),
+    }
+}
+
+pub fn create_modbus(operation: ModbusOperation, data: &[u8]) -> Vec<u8> {
+    let mut buffer = Vec::with_capacity(9 + data.len());
+
+    buffer.push(TARGET_ADDRESS);
+
+    buffer.push(operation.code);
+
+    buffer.push(operation.subcode);
+
+    for byte in data {
+        buffer.push(*byte);
+    }
+
+    for byte in REGISTER_CODE {
+        buffer.push(byte);
+    }
+
+    for byte in crc::hash(&buffer).to_le_bytes() {
+        buffer.push(byte);
+    }
+
+    buffer
+}
+
+pub fn checa_crc16(buffer: &[u8]) -> bool {
+    if buffer.len() < 2 {
+        return false;
+    }
+
+    let received_crc = u16::from_le_bytes([buffer[buffer.len() - 2], buffer[buffer.len() - 1]]);
+    let calculated_crc = crc::hash(&buffer[..buffer.len() - 2]);
+
+    received_crc == calculated_crc
+}
+
+pub fn read_modbus(operation: ModbusOperation, buffer: &[u8]) -> Result<&[u8], String> {
+    if buffer.len() < 5 {
+        return Err("Resposta muito curta".to_string());
+    }
+
+    let crc_check = checa_crc16(buffer);
+    if !crc_check {
+        return Err("Erro de CRC".to_string());
+    }
+
+    Ok(buffer)
+}
+
+#[derive(Clone, Copy)]
+pub struct ModbusOperation {
+    code: u8,
+    subcode: u8,
+    qtd: Option<u8>,
+}
+
 
 pub fn temp_motor() {
     let mut uarto = Uart::new(BAUD_RATE, Parity::None, DATA_BITS, STOP_BITS).unwrap();
@@ -114,3 +244,4 @@ fn desliga_seta(dados: u8, uarto: &mut Uart) {
     registrador.extend(&crc.to_le_bytes());
     uarto.write(registrador.as_slice()).unwrap();
 }
+
