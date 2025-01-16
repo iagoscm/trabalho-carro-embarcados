@@ -3,8 +3,8 @@ mod uart;
 mod gpio;
 
 //use std::thread;
-//use uart::modbus::seta_esquerda;
-//use uart::modbus::temp_motor;
+use uart::modbus::seta;
+use uart::modbus::temp_motor;
 //use std::time::Duration;
 
 fn main() {
@@ -45,6 +45,7 @@ fn main() {
         //     }
         // }
         temp_motor();
+        seta();
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
 }

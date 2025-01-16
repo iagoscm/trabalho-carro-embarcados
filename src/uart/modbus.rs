@@ -133,7 +133,7 @@ pub fn create_modbus(operation: ModbusOperation, data: &[u8]) -> Vec<u8> {
     for byte in crc::hash(&buffer).to_le_bytes() {
         buffer.push(byte);
     }
-
+    
     buffer
 }
 
@@ -148,7 +148,7 @@ pub fn checa_crc16(buffer: &[u8]) -> bool {
     received_crc == calculated_crc
 }
 
-pub fn read_modbus(uarto : &mut Uart, start: u8, end: u8, tam: usize) -> Vec<u8> {
+pub fn read_modbus(uarto : &mut Uart, start: usize, end: usize, tam: usize) -> Vec<u8> {
     let mut leitura = vec![0; tam];
     let response = uarto.read(&mut leitura);
 
@@ -176,7 +176,7 @@ pub struct ModbusOperation {
 
 pub fn temp_motor() {
     let mut uarto = open_uart();
-    let mut envia = create_modbus(LE_TEMP, &[]);
+    let envia = create_modbus(LE_TEMP, &[]);
 
     uarto.write(envia.as_slice()).unwrap(); 
     sleep(Duration::from_secs(1));
@@ -195,20 +195,18 @@ pub fn seta() {
     uarto.write(envia.as_slice()).unwrap(); 
     sleep(Duration::from_secs(1));
 
-    let value = read_modbus(&mut uarto,0,2,3);
+    let value = read_modbus(&mut uarto,0,3,4);
 
-    match value {
-        Ok(n) => {
-            if n > 0 {
-                let byte_da_seta = value[2];
-                let ultimos_dois_bits = byte_da_seta & 0b00000011;
-                println!("Os dois últimos bits do byte da seta: {:02b}", ultimos_dois_bits);
-                if ultimos_dois_bits == 0b10 {desliga_seta(1, &mut uarto);} // direita
-                else if ultimos_dois_bits == 0b01 {desliga_seta(2, &mut uarto);} // esquerda
-            }
+    match value.len() {
+        _ => {
+            let byte_da_seta = value[2];
+            let ultimos_dois_bits = byte_da_seta & 0b00000011;
+            println!("Os dois últimos bits do byte da seta: {:02b}", ultimos_dois_bits);
+            if ultimos_dois_bits == 0b10 {desliga_seta(1, &mut uarto);} // direita
+            else if ultimos_dois_bits == 0b01 {desliga_seta(2, &mut uarto);} // esquerda
         },
-        Err(e) => {
-            eprintln!("Erro na leitura: {}", e);
+        0 => {
+            eprintln!("Erro: Nenhum dado foi retornado.");
         }
     }
 
@@ -216,40 +214,42 @@ pub fn seta() {
     drop(uarto);
 }
 
-fn desliga_seta(direction: usize, uarto: &mut Uart) {
+fn desliga_seta(direction: usize, mut uarto: &mut Uart) {
     // mudar de 10 ou 01 para 00 (botão da seta)
     let mut seta = create_modbus(CONTROL_WRITE_SETA, &[0]);
     uarto.write(seta.as_slice()).unwrap();
+    println!("Direcao: {}",direction);
 
     if direction == 1 { 
+        let envia = create_modbus(CONTROL_READ_SETA_DIREITA, &[]);
+        uarto.write(envia.as_slice()).unwrap(); 
+        sleep(Duration::from_secs(1));
+        let leitura = read_modbus(&mut uarto,0,3,4);
+        println!("valor da seta direita: {:?}",leitura);
+
+        let registrador = create_modbus(CONTROL_WRITE_SETA_DIREITA, &[0]);
+        uarto.write(envia.as_slice()).unwrap(); 
+        sleep(Duration::from_secs(1));
+
+        let envia = create_modbus(CONTROL_READ_SETA_DIREITA, &[]);
+        uarto.write(envia.as_slice()).unwrap(); 
+        sleep(Duration::from_secs(1));
+        let leitura = read_modbus(&mut uarto,0,3,4);
+        println!("valor da seta direita após mudança: {}",leitura[2]);
 
     }else{
-        let mut envia = create_modbus(CONTROL_READ_SETA_ESQUERDA, &[]);
+        let envia = create_modbus(CONTROL_READ_SETA_ESQUERDA, &[]);
+        uarto.write(envia.as_slice()).unwrap(); 
+        sleep(Duration::from_secs(1));
+        let leitura = read_modbus(&mut uarto,0,3,4);
+        println!("valor da seta esquerda: {}",leitura[2]);
+        let registrador = create_modbus(CONTROL_WRITE_SETA_ESQUERDA, &[0]);
+        uarto.write(envia.as_slice()).unwrap(); 
     }
+    
+}
 
-    let mut envia = Vec::with_capacity(11);
-    envia.push(0x01);
-    envia.push(0x03);
-    envia.push(dados);
-    envia.push(1); 
-    envia.extend_from_slice(&[5,0,0,7]);
-    let crc = crc::hash(&envia);
-    envia.extend(&crc.to_le_bytes());
-    uarto.write(envia.as_slice()).unwrap(); 
-    sleep(Duration::from_secs(1));
-    let mut leitura = vec![0; 255]; 
-    uarto.read(&mut leitura); 
-    println!("Estado atual da seta: {}",leitura[2]);
-
-    // mudar o estado da seta
-    let mut registrador = Vec::with_capacity(11);
-    registrador.push(0x01);
-    registrador.push(0x06);
-    registrador.push(dados);
-    registrador.push(1); 
-    registrador.push(!leitura[2]); // se tiver ligado vai pra 0, se tiver desligado vai pra 1
-    registrador.extend_from_slice(&[5,0,0,7]);
-    let crc = crc::hash(&registrador);
-    registrador.extend(&crc.to_le_bytes());
-    uarto.write(registrador.as_slice()).unwrap();
+pub fn open_uart() -> Uart {
+    let mut uarto = Uart::new(BAUD_RATE, Parity::None, DATA_BITS, STOP_BITS).unwrap();
+    uarto 
 }
