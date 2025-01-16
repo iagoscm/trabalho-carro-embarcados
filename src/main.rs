@@ -1,6 +1,8 @@
 mod i2c;
 mod uart;
 mod gpio;
+mod car;
+mod common;
 
 //use std::thread;
 use uart::modbus::seta;
