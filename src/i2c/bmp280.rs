@@ -1,23 +1,30 @@
-/*use crate::uart::esp32::Car;
-use std::{
-    fs::read_to_string,
-    io::{Error, ErrorKind::InvalidData},
+use bmp280::Bmp280Builder;
+
+pub fn read_bmp280(path: &str, address: u16) -> Result<(f32, f32), String> {
+    let mut dev = Bmp280Builder::new()
+        .path(path)
+        .address(address)
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let temperature = dev.temperature_celsius().map_err(|e| e.to_string())?;
+    let pressure = dev.pressure_kpa().map_err(|e| e.to_string())?;
+    todo!("Converter kpa para hpa");
+
+    Ok((temperature, pressure))
 }
 
-const TEMPERATURE_FILE_1: &str = "/sys/bus/iio/devices/iio:device0/in_temp_input";
-const TEMPERATURE_FILE_2: &str = "/sys/bus/iio/devices/iio:device1/in_temp_input";
+/*
+Codigo de exemplo para puxar a temperatura:
+  match i2c::bmp280::read_bmp280("/dev/i2c-1", 0x76) {
+      Ok((temperature, pressure)) => {
+      // Exibe os valores de temperatura e pressão
+          println!("Temperatura: {:.2} ºC", temperature);
+          println!("Pressão: {:.2} kPa", pressure);
+        }
+      Err(e) => {
+          println!("Erro ao ler o sensor: {}", e);
+        }
+  }
 
-pub fn measure_temperature(car: Car) -> Result<f32, Error> {
-    let file = match car {
-        Car::One => TEMPERATURE_FILE_1,
-        Car::Two => TEMPERATURE_FILE_2,
-};
-
- let in_temp_input: f32 = read_to_string(file)?
-        .parse()
-        .map_err(|e| Error::new(InvalidData, e))?;
-
-Ok((((in_temp_input / 1000.0) * 100.0) + 0.5) / 100.0)
-
-}
 */
