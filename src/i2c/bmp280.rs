@@ -9,7 +9,7 @@ pub fn read_bmp280(path: &str, address: u16) -> Result<(f32, f32), String> {
 
     let temperature = dev.temperature_celsius().map_err(|e| e.to_string())?;
     let pressure = dev.pressure_kpa().map_err(|e| e.to_string())?;
-    todo!("Converter kpa para hpa");
+//    todo!("Converter kpa para hpa");
 
     Ok((temperature, pressure))
 }
