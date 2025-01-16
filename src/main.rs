@@ -1,12 +1,11 @@
-//mod i2c;
+mod i2c;
 mod uart;
 mod gpio;
 
-use crate::uart::modbus::{create_modbus, read_modbus, LE_TEMP, CONTROL_SETA_ESQUERDA, CONTROL_SETA_DIREITA};
-use std::thread;
-use uart::modbus::seta_esquerda;
-use uart::modbus::temp_motor;
-use std::time::Duration;
+//use std::thread;
+//use uart::modbus::seta_esquerda;
+//use uart::modbus::temp_motor;
+//use std::time::Duration;
 
 fn main() {
   // a cada 50ms pedir temperatura do motor, e ler comando das setas

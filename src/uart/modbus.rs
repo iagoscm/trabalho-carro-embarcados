@@ -1,6 +1,8 @@
-use crate::uart::crc;
+
 use std::thread::sleep;
 use std::time::Duration;
+use crate::uart::crc;
+
 use rppal::uart::{Parity, Uart};
 
 const BAUD_RATE: u32 = 115200;
@@ -251,4 +253,3 @@ fn desliga_seta(direction: usize, uarto: &mut Uart) {
     registrador.extend(&crc.to_le_bytes());
     uarto.write(registrador.as_slice()).unwrap();
 }
-
