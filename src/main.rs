@@ -1,12 +1,10 @@
 mod i2c;
 mod uart;
 mod gpio;
+mod car;
+mod common;
 
-//use std::thread;
 use uart::modbus;
-use gpio::desliga;
-// use uart::modbus::temp_motor;
-//use std::time::Duration;
 
 fn main() {
   // a cada 50ms pedir temperatura do motor, e ler comando das setas
@@ -45,12 +43,8 @@ fn main() {
         //         println!("Erro ao ler comando de seta à direita: {}", e);
         //     }
         // }
-        // modbus::temp_motor();
-        modbus::farol();
+        modbus::temp_motor();
         modbus::seta();
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
-
-    desliga();
-
 }

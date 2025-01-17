@@ -3,7 +3,7 @@ use std::thread::sleep;
 use rppal::uart::Queue;
 use std::time::Duration;
 use crate::uart::crc;
-use crate::gpio;
+use crate::gpio::gpio;
 
 use rppal::uart::{Parity, Uart};
 
@@ -206,7 +206,7 @@ pub fn seta() {
 
     let mut leitura = vec![0; 7];
     match uarto.read(&mut leitura) {
-        Ok(bytes_read) => ,//println!("Número de bytes lidos da seta: {}", bytes_read),
+        Ok(bytes_read) => println!("Número de bytes lidos da seta: {}", bytes_read),
         Err(e) => eprintln!("Erro ao ler seta: {}", e),
     }
 
@@ -275,7 +275,7 @@ pub fn farol() {
 
     let mut leitura = vec![0; 7];
     match uarto.read(&mut leitura) {
-        Ok(bytes_read) => ,//println!("Número de bytes lidos do farol: {}", bytes_read),
+        Ok(bytes_read) => println!("Número de bytes lidos do farol: {}", bytes_read),
         Err(e) => eprintln!("Erro ao ler farol: {}", e),
     }
 
