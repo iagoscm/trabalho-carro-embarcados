@@ -16,6 +16,7 @@ const SOURCE_ADDRESS: u8 = 0x00;
 const TARGET_ADDRESS: u8 = 0x01;
 const REGISTER_CODE: [u8; 4] = [3, 7, 4, 3];
 
+
 pub const LE_TEMP: ModbusOperation = ModbusOperation {
     code: 0x23,
     subcode: 0xAA,
@@ -58,27 +59,15 @@ pub const CONTROL_WRITE_SETA_DIREITA: ModbusOperation = ModbusOperation {
     qtd: Some(1),
 };
 
-pub const CONTROL_CRUISE_RESUME: ModbusOperation = ModbusOperation {
-    code: 0x01,
-    subcode: 0x01,  // RES
+pub const CONTROL_CRUISE_READ: ModbusOperation = ModbusOperation {
+    code: 0x03,
+    subcode: 0x01,  
     qtd: Some(1),
 };
 
-pub const CONTROL_CRUISE_CANCEL: ModbusOperation = ModbusOperation {
-    code: 0x01,
-    subcode: 0x02,  // CANCEL
-    qtd: Some(1),
-};
-
-pub const CONTROL_CRUISE_SET_PLUS: ModbusOperation = ModbusOperation {
-    code: 0x01,
-    subcode: 0x04,  // Set + 
-    qtd: Some(1),
-};
-
-pub const CONTROL_CRUISE_SET_MINUS: ModbusOperation = ModbusOperation {
-    code: 0x01,
-    subcode: 0x10,  // Set - 
+pub const CONTROL_CRUISE_WRITE: ModbusOperation = ModbusOperation {
+    code: 0x06,
+    subcode: 0x01,  
     qtd: Some(1),
 };
 
@@ -208,10 +197,7 @@ pub fn seta(carro: &CarControl) {
     sleep(Duration::from_millis(50));
 
     let mut leitura = vec![0; 7];
-    match uarto.read(&mut leitura) {
-        Ok(bytes_read) => println!("Número de bytes lidos da seta: {}", bytes_read),
-        Err(e) => eprintln!("Erro ao ler seta: {}", e),
-    }
+    uarto.read(&mut leitura);
 
     let byte_da_seta = leitura[2];
     let ultimos_dois_bits = byte_da_seta & 0b00000011;
@@ -231,40 +217,26 @@ fn muda_seta(direction: usize, estado: &mut bool) {
 
     if direction == 1 {
         println!("SETA DIREITA");
-        gpio::pisca_seta_direita(); 
+        //gpio::pisca_seta_direita(); 
 
         let mut request = create_modbus(CONTROL_WRITE_SETA_DIREITA, &[if *estado { 0 } else { 1 }]);
         *estado = !*estado;
         let mut response = [0; 5];
-
-        match uarto.write(&request) {
-            Ok(bytes_written) => println!("Número de bytes escritos: {}", bytes_written),
-            Err(e) => eprintln!("Erro ao escrever: {}", e),
-        }
-
+        uarto.write(&request);
         sleep(Duration::from_millis(50));
-        match uarto.read(&mut response) {
-            Ok(bytes_read) => println!("Número de bytes lidos: {}", bytes_read),
-            Err(e) => eprintln!("Erro ao ler: {}", e),
-        }
+        uarto.read(&mut response);
+
     } else {
         println!("SETA ESQUERDA");
-        gpio::pisca_seta_esquerda(); 
+        //gpio::pisca_seta_esquerda(); 
 
         let mut request = create_modbus(CONTROL_WRITE_SETA_ESQUERDA, &[if *estado { 0 } else { 1 }]);
         *estado = !*estado;
         let mut response = [0; 5];
-
-        match uarto.write(&request) {
-            Ok(bytes_written) => println!("Número de bytes escritos: {}", bytes_written),
-            Err(e) => eprintln!("Erro ao escrever: {}", e),
-        }
+        uarto.write(&request);
 
         sleep(Duration::from_millis(50));
-        match uarto.read(&mut response) {
-            Ok(bytes_read) => println!("Número de bytes lidos: {}", bytes_read),
-            Err(e) => eprintln!("Erro ao ler: {}", e),
-        }
+        uarto.read(&mut response);
     }
  
     
@@ -284,18 +256,14 @@ pub fn farol(carro: &CarControl) {
     sleep(Duration::from_millis(50));
 
     let mut leitura = vec![0; 7];
-    match uarto.read(&mut leitura) {
-        Ok(bytes_read) => println!("Número de bytes lidos do farol: {}", bytes_read),
-        Err(e) => eprintln!("Erro ao ler farol: {}", e),
-    }
+    uarto.read(&mut leitura);
 
-    let byte_da_seta = leitura[2];
-    let ultimos_dois_bits = byte_da_seta & 0b00000011;
+    let byte_do_farol = leitura[2];
+    let ultimos_dois_bits = byte_do_farol & 0b00000011;
     // println!("Os dois últimos bits do byte do FAROL: {:02b}", ultimos_dois_bits);
     if ultimos_dois_bits == 0b10 {muda_farol(1, &mut car_state.farol_alto);} // farol alto
     else if ultimos_dois_bits == 0b01 {muda_farol(2, &mut car_state.farol_baixo);} // farol baixo
         
-
     drop(uarto);
 }
 
@@ -306,52 +274,65 @@ pub fn muda_farol(farol_direcao: usize, estado: &mut bool){
     
     let mut success = false;
     if farol_direcao == 2 { 
-        println!("FAROL BAIXO");
-        if *estado == true { gpio::farol_baixo_desliga(); }
-        else { gpio::farol_baixo_liga(); }
+        println!("FAROL BAIXO | Estado: {}",*estado);
+        if *estado == true { gpio::farol_baixo_desliga(); println!("Desliga farol baixo"); }
+        else { gpio::farol_baixo_liga(); println!("Liga farol baixo"); }
         
-
         //println!("Estado FAROL BAIXO: {}",estado);
         let mut request = create_modbus(CONTROL_WRITE_FAROL_BAIXO, &[if *estado { 0 } else { 1 }]);
         *estado = !*estado;
         let mut response = [0; 5];
-
-        match uarto.write(&request) {
-            Ok(bytes_written) => println!("Número de bytes escritos do farol baixo 2: {}", bytes_written),
-            Err(e) => eprintln!("Erro ao escrever farol baixo 2: {}", e),
-        }
+        uarto.write(&request);
 
         sleep(Duration::from_millis(50));
-        match uarto.read(&mut response) {
-            Ok(bytes_read) => println!("Número de bytes lidos do farol baixo 2: {}", bytes_read),
-            Err(e) => eprintln!("Erro ao ler baixo 2: {}", e),
-        }
+        uarto.read(&mut response);
 
     } else {
         println!("FAROL ALTO");
-        if *estado == true { gpio::farol_alto_desliga(); }
-        else { gpio::farol_alto_liga(); }
-
+        if *estado == true { gpio::farol_alto_desliga(); println!("Liga farol baixo"); }
+        else { gpio::farol_alto_liga(); println!("Liga farol alto"); }
         //println!("Estado FAROL ALTO: {}",estado);
         let mut request = create_modbus(CONTROL_WRITE_FAROL_ALTO, &[if *estado { 0 } else { 1 }]);
         *estado = !*estado;
-
         let mut response = [0; 5];
-
-        match uarto.write(&request) {
-            Ok(bytes_written) => println!("Número de bytes escritos: {}", bytes_written),
-            Err(e) => eprintln!("Erro ao escrever: {}", e),
-        }
-
-        // request = 0x00, 0x03, byte
+        uarto.write(&request);
         sleep(Duration::from_millis(50));
-        match uarto.read(&mut response) {
-            Ok(bytes_read) => println!("Número de bytes lidos: {}", bytes_read),
-            Err(e) => eprintln!("Erro ao ler: {}", e),
-        }
+        uarto.read(&mut response);
     }
 
     drop(uarto);
+}
+
+const RES: u8 = 0x01;
+const CANCEL: u8 = 0x02;
+const SET_PLUS: u8 = 0x04;
+const SET_MINUS: u8 = 0x10;
+
+pub fn cruise_control(carro: &CarControl) {
+    let mut uarto = open_uart();
+    let mut envia = create_modbus(CONTROL_CRUISE_READ, &[]);
+    let mut car_state = carro.get_car_state();
+
+    uarto.write(&envia).unwrap(); 
+    sleep(Duration::from_millis(50));
+
+    let mut leitura = vec![0; 4]; 
+    uarto.read(&mut leitura);
+
+    let byte_do_cruise = leitura[2];
+    match byte_do_cruise {
+        0b00000001 => println!("Comando: RES"),
+        0b00000010 => println!("Comando: CANCEL"),
+        0b00000100 => println!("Comando: SET +"),
+        0b00001000 => println!("Comando: SET -"),
+        _ => println!("Comando desconhecido: {:08b}",byte_do_cruise),
+    }
+
+    let mut farol = create_modbus(CONTROL_CRUISE_WRITE, &[0]);
+    uarto.write(&farol).unwrap();
+
+    drop(uarto);
+
 }
 
 pub fn desliga() {
