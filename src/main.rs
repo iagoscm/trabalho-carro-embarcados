@@ -3,8 +3,9 @@ mod uart;
 mod gpio;
 
 //use std::thread;
-use uart::modbus::seta;
-use uart::modbus::temp_motor;
+use uart::modbus;
+use gpio::desliga;
+// use uart::modbus::temp_motor;
 //use std::time::Duration;
 
 fn main() {
@@ -44,8 +45,12 @@ fn main() {
         //         println!("Erro ao ler comando de seta à direita: {}", e);
         //     }
         // }
-        temp_motor();
-        seta();
+        // modbus::temp_motor();
+        modbus::farol();
+        modbus::seta();
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
+
+    desliga();
+
 }

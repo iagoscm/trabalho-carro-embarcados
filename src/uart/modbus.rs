@@ -1,7 +1,9 @@
 
 use std::thread::sleep;
+use rppal::uart::Queue;
 use std::time::Duration;
 use crate::uart::crc;
+use crate::gpio;
 
 use rppal::uart::{Parity, Uart};
 
@@ -79,15 +81,39 @@ pub const CONTROL_CRUISE_SET_MINUS: ModbusOperation = ModbusOperation {
     qtd: Some(1),
 };
 
-pub const FAROL_ALTO: ModbusOperation = ModbusOperation {
-    code: 0x02,
-    subcode: 0x01,  // Set - 
+pub const CONTROL_FAROL: ModbusOperation = ModbusOperation {
+    code: 0x03,
+    subcode: 0x02,  
     qtd: Some(1),
 };
 
-pub const FAROL_BAIXO: ModbusOperation = ModbusOperation {
-    code: 0x02,
-    subcode: 0x02,  // Set - 
+pub const CONTROL_WRITE_FAROL: ModbusOperation = ModbusOperation {
+    code: 0x06,
+    subcode: 0x02,  
+    qtd: Some(1),
+};
+
+pub const CONTROL_FAROL_ALTO: ModbusOperation = ModbusOperation {
+    code: 0x03,
+    subcode: 0x0D, // 13
+    qtd: Some(1),
+};
+
+pub const CONTROL_FAROL_BAIXO: ModbusOperation = ModbusOperation {
+    code: 0x03,
+    subcode: 0x0E, // 14
+    qtd: Some(1),
+};
+
+pub const CONTROL_WRITE_FAROL_ALTO: ModbusOperation = ModbusOperation {
+    code: 0x06,
+    subcode: 0x0D,  
+    qtd: Some(1),
+};
+
+pub const CONTROL_WRITE_FAROL_BAIXO: ModbusOperation = ModbusOperation {
+    code: 0x06,
+    subcode: 0x0E,  
     qtd: Some(1),
 };
 
@@ -148,24 +174,6 @@ pub fn checa_crc16(buffer: &[u8]) -> bool {
     received_crc == calculated_crc
 }
 
-pub fn read_modbus(uarto : &mut Uart, start: usize, end: usize, tam: usize) -> Vec<u8> {
-    let mut leitura = vec![0; tam];
-    let response = uarto.read(&mut leitura);
-
-    match response {
-        Ok(_) => {
-            
-        }
-        Err(e) => {
-            eprintln!("Failed to read from UART: {}", e);
-            return Vec::new(); 
-        }
-    }
-    
-    leitura[start..end].to_vec()  
-}
-
-
 #[derive(Clone, Copy)]
 pub struct ModbusOperation {
     code: u8,
@@ -179,12 +187,13 @@ pub fn temp_motor() {
     let envia = create_modbus(LE_TEMP, &[]);
 
     uarto.write(envia.as_slice()).unwrap(); 
-    sleep(Duration::from_secs(1));
+    sleep(Duration::from_millis(500));
     
-    let value = read_modbus(&mut uarto,3,7,7);
-    let float_value = f32::from_le_bytes(value.try_into().expect("Falha na conversão para f32"));
+    let mut leitura = vec![0; 7];
+    let response = uarto.read(&mut leitura).unwrap();
+    let float_value = f32::from_le_bytes(leitura[3..7].try_into().expect("Falha na conversão para f32"));
 
-    println!("Valor do float: {}", float_value);
+    println!("Valor temp: {}", float_value);
 
     drop(uarto);
 }
@@ -192,64 +201,137 @@ pub fn temp_motor() {
 pub fn seta() {
     let mut uarto = open_uart();
     let mut envia = create_modbus(CONTROL_READ_SETA, &[]);
-    uarto.write(envia.as_slice()).unwrap(); 
-    sleep(Duration::from_secs(1));
+    uarto.write(&envia).unwrap(); 
+    sleep(Duration::from_millis(500));
 
-    let value = read_modbus(&mut uarto,0,3,4);
-
-    match value.len() {
-        _ => {
-            let byte_da_seta = value[2];
-            let ultimos_dois_bits = byte_da_seta & 0b00000011;
-            println!("Os dois últimos bits do byte da seta: {:02b}", ultimos_dois_bits);
-            if ultimos_dois_bits == 0b10 {desliga_seta(1, &mut uarto);} // direita
-            else if ultimos_dois_bits == 0b01 {desliga_seta(2, &mut uarto);} // esquerda
-        },
-        0 => {
-            eprintln!("Erro: Nenhum dado foi retornado.");
-        }
+    let mut leitura = vec![0; 7];
+    match uarto.read(&mut leitura) {
+        Ok(bytes_read) => ,//println!("Número de bytes lidos da seta: {}", bytes_read),
+        Err(e) => eprintln!("Erro ao ler seta: {}", e),
     }
 
+    let byte_da_seta = leitura[2];
+    let ultimos_dois_bits = byte_da_seta & 0b00000011;
+    //println!("Os dois últimos bits do byte da seta: {:02b}", ultimos_dois_bits);
+    if ultimos_dois_bits == 0b10 {muda_seta(1, &mut uarto);} // direita
+    else if ultimos_dois_bits == 0b01 {muda_seta(2, &mut uarto);} // esquerda
+        
     
     drop(uarto);
 }
 
-fn desliga_seta(direction: usize, mut uarto: &mut Uart) {
-    // mudar de 10 ou 01 para 00 (botão da seta)
+fn muda_seta(direction: usize, mut uarto: &mut Uart) {
     let mut seta = create_modbus(CONTROL_WRITE_SETA, &[0]);
-    uarto.write(seta.as_slice()).unwrap();
+    uarto.write(&seta).unwrap();
     println!("Direcao: {}",direction);
 
-    if direction == 1 { 
-        let envia = create_modbus(CONTROL_READ_SETA_DIREITA, &[]);
-        uarto.write(envia.as_slice()).unwrap(); 
-        sleep(Duration::from_secs(1));
-        let leitura = read_modbus(&mut uarto,0,3,4);
-        println!("valor da seta direita: {:?}",leitura);
+    if direction == 1 {
+        println!("SETA DIREITA");
 
-        let registrador = create_modbus(CONTROL_WRITE_SETA_DIREITA, &[0]);
-        uarto.write(envia.as_slice()).unwrap(); 
-        sleep(Duration::from_secs(1));
+        let mut request = create_modbus(CONTROL_WRITE_SETA_DIREITA, &[0]);
+        let mut response = [0; 5];
 
-        let envia = create_modbus(CONTROL_READ_SETA_DIREITA, &[]);
-        uarto.write(envia.as_slice()).unwrap(); 
-        sleep(Duration::from_secs(1));
-        let leitura = read_modbus(&mut uarto,0,3,4);
-        println!("valor da seta direita após mudança: {}",leitura[2]);
+        match uarto.write(&request) {
+            Ok(bytes_written) => println!("Número de bytes escritos: {}", bytes_written),
+            Err(e) => eprintln!("Erro ao escrever: {}", e),
+        }
 
-    }else{
-        let envia = create_modbus(CONTROL_READ_SETA_ESQUERDA, &[]);
-        uarto.write(envia.as_slice()).unwrap(); 
-        sleep(Duration::from_secs(1));
-        let leitura = read_modbus(&mut uarto,0,3,4);
-        println!("valor da seta esquerda: {}",leitura[2]);
-        let registrador = create_modbus(CONTROL_WRITE_SETA_ESQUERDA, &[0]);
-        uarto.write(envia.as_slice()).unwrap(); 
+        sleep(Duration::from_millis(50));
+        match uarto.read(&mut response) {
+            Ok(bytes_read) => println!("Número de bytes lidos: {}", bytes_read),
+            Err(e) => eprintln!("Erro ao ler: {}", e),
+        }
+    } else {
+        println!("SETA ESQUERDA");
+
+        let mut request = create_modbus(CONTROL_WRITE_SETA_ESQUERDA, &[0]);
+        let mut response = [0; 5];
+
+        match uarto.write(&request) {
+            Ok(bytes_written) => println!("Número de bytes escritos: {}", bytes_written),
+            Err(e) => eprintln!("Erro ao escrever: {}", e),
+        }
+
+        sleep(Duration::from_millis(50));
+        match uarto.read(&mut response) {
+            Ok(bytes_read) => println!("Número de bytes lidos: {}", bytes_read),
+            Err(e) => eprintln!("Erro ao ler: {}", e),
+        }
     }
+ 
     
 }
 
 pub fn open_uart() -> Uart {
     let mut uarto = Uart::new(BAUD_RATE, Parity::None, DATA_BITS, STOP_BITS).unwrap();
     uarto 
+}
+
+pub fn farol() {
+    let mut uarto = open_uart();
+    let mut envia = create_modbus(CONTROL_FAROL, &[]);
+    uarto.write(&envia).unwrap(); 
+    sleep(Duration::from_millis(500));
+
+    let mut leitura = vec![0; 7];
+    match uarto.read(&mut leitura) {
+        Ok(bytes_read) => ,//println!("Número de bytes lidos do farol: {}", bytes_read),
+        Err(e) => eprintln!("Erro ao ler farol: {}", e),
+    }
+
+    let byte_da_seta = leitura[2];
+    let ultimos_dois_bits = byte_da_seta & 0b00000011;
+    // println!("Os dois últimos bits do byte do FAROL: {:02b}", ultimos_dois_bits);
+    if ultimos_dois_bits == 0b10 {muda_farol(1);} // farol alto
+    else if ultimos_dois_bits == 0b01 {muda_farol(2);} // farol baixo
+        
+
+    drop(uarto);
+}
+
+pub fn muda_farol(farol_direcao: usize){
+    let mut uarto = open_uart();
+    let mut farol = create_modbus(CONTROL_WRITE_FAROL, &[0]);
+    uarto.write(&farol).unwrap();
+    
+    let mut success = false;
+    if farol_direcao == 2 { 
+        println!("FAROL BAIXO");
+        gpio::farol_baixo(); 
+
+        let mut request = create_modbus(CONTROL_WRITE_FAROL_BAIXO, &[0]);
+        let mut response = [0; 5];
+
+        match uarto.write(&request) {
+            Ok(bytes_written) => println!("Número de bytes escritos do farol baixo 2: {}", bytes_written),
+            Err(e) => eprintln!("Erro ao escrever farol baixo 2: {}", e),
+        }
+
+        sleep(Duration::from_millis(50));
+        match uarto.read(&mut response) {
+            Ok(bytes_read) => println!("Número de bytes lidos do farol baixo 2: {}", bytes_read),
+            Err(e) => eprintln!("Erro ao ler baixo 2: {}", e),
+        }
+
+    } else {
+        println!("FAROL ALTO");
+        gpio::farol_alto(); 
+
+        let mut request = create_modbus(CONTROL_WRITE_FAROL_ALTO, &[0]);
+        let mut response = [0; 5];
+
+        match uarto.write(&request) {
+            Ok(bytes_written) => println!("Número de bytes escritos: {}", bytes_written),
+            Err(e) => eprintln!("Erro ao escrever: {}", e),
+        }
+
+        // request = 0x00, 0x03, byte
+        sleep(Duration::from_millis(50));
+        match uarto.read(&mut response) {
+            Ok(bytes_read) => println!("Número de bytes lidos: {}", bytes_read),
+            Err(e) => eprintln!("Erro ao ler: {}", e),
+        }
+    }
+
+    drop(uarto);
 }

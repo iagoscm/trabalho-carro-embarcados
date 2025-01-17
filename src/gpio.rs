@@ -42,10 +42,7 @@ pub mod constants {
   pub const CRUISE_CONTROL_PASSO: f32 = 1.0;
 }
 
-pub static mut SETA_ESQ_LIGADA: bool = false;
-pub static mut SETA_DIR_LIGADA: bool = false;
-
-pub fn pisca() {
+pub fn pisca_seta_esquerda() {
   let gpio = Gpio::new()
       .expect("Erro ao configurar GPIO, o programa está sendo executado em uma raspberry pi?");
 
@@ -63,3 +60,76 @@ pub fn pisca() {
   }
 }
 
+pub fn farol_baixo() {
+  let gpio = Gpio::new()
+      .expect("Erro ao configurar GPIO, o programa está sendo executado em uma raspberry pi?");
+
+  let mut pin = gpio   // obtém o pino 17 e o configura como saída em nível baixo
+      .get(gpio::FAROL_BAIXO)
+      .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::LUZ_SETA_ESQ).as_str())
+      .into_output_low();
+
+      pin.set_low();
+
+      if pin.is_set_low() {
+        pin.set_high();
+        println!("Alterado para HIGH.");
+      } else {
+        pin.set_low();
+        println!("Alterado para LOW.");
+      }
+}
+
+pub fn farol_alto() {
+  let gpio = Gpio::new()
+      .expect("Erro ao configurar GPIO, o programa está sendo executado em uma raspberry pi?");
+
+  let mut pin = gpio   
+      .get(gpio::FAROL_ALTO)
+      .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::LUZ_SETA_ESQ).as_str())
+      .into_output_low();
+
+  pin.set_low();
+
+  if pin.is_set_low() {
+    pin.set_high();
+    println!("Alterado para HIGH.");
+  } else {
+    pin.set_low();
+    println!("Alterado para LOW.");
+  }
+}
+
+pub fn desliga() {
+  let gpio = Gpio::new()
+    .expect("Erro ao configurar GPIO, o programa está sendo executado em uma raspberry pi?");
+
+  let mut farol_alto = gpio   
+    .get(gpio::FAROL_ALTO)
+    .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::LUZ_SETA_ESQ).as_str())
+    .into_output_low();
+
+  farol_alto.set_low();
+
+  let mut farol_baixo = gpio   
+    .get(gpio::FAROL_BAIXO)
+    .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::LUZ_SETA_ESQ).as_str())
+    .into_output_low();
+
+  farol_baixo.set_low();
+
+  let mut seta_esquerda = gpio   
+    .get(gpio::LUZ_SETA_ESQ)
+    .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::LUZ_SETA_ESQ).as_str())
+    .into_output_low();
+
+  seta_esquerda.set_low();
+
+  let mut seta_direita = gpio   
+    .get(gpio::LUZ_SETA_DIR)
+    .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::LUZ_SETA_ESQ).as_str())
+    .into_output_low();
+
+  seta_direita.set_low();
+
+}
