@@ -1,11 +1,12 @@
-
 use std::thread::sleep;
-use rppal::uart::Queue;
 use std::time::Duration;
+
+use rppal::uart::Queue;
+use rppal::uart::{Parity, Uart};
+
 use crate::uart::crc;
 use crate::gpio::gpio;
-
-use rppal::uart::{Parity, Uart};
+use crate::car::control::CarControl;
 
 const BAUD_RATE: u32 = 115200;
 const DATA_BITS: u8 = 8;
@@ -187,7 +188,7 @@ pub fn temp_motor() {
     let envia = create_modbus(LE_TEMP, &[]);
 
     uarto.write(envia.as_slice()).unwrap(); 
-    sleep(Duration::from_millis(500));
+    sleep(Duration::from_millis(50));
     
     let mut leitura = vec![0; 7];
     let response = uarto.read(&mut leitura).unwrap();
@@ -198,11 +199,13 @@ pub fn temp_motor() {
     drop(uarto);
 }
 
-pub fn seta() {
+pub fn seta(carro: &CarControl) {
     let mut uarto = open_uart();
     let mut envia = create_modbus(CONTROL_READ_SETA, &[]);
+    let mut car_state = carro.get_car_state();
+
     uarto.write(&envia).unwrap(); 
-    sleep(Duration::from_millis(500));
+    sleep(Duration::from_millis(50));
 
     let mut leitura = vec![0; 7];
     match uarto.read(&mut leitura) {
@@ -213,22 +216,25 @@ pub fn seta() {
     let byte_da_seta = leitura[2];
     let ultimos_dois_bits = byte_da_seta & 0b00000011;
     //println!("Os dois últimos bits do byte da seta: {:02b}", ultimos_dois_bits);
-    if ultimos_dois_bits == 0b10 {muda_seta(1, &mut uarto);} // direita
-    else if ultimos_dois_bits == 0b01 {muda_seta(2, &mut uarto);} // esquerda
+    if ultimos_dois_bits == 0b10 {muda_seta(1, &mut car_state.seta_direita);} // direita
+    else if ultimos_dois_bits == 0b01 {muda_seta(2, &mut car_state.seta_esquerda);} // esquerda
         
     
     drop(uarto);
 }
 
-fn muda_seta(direction: usize, mut uarto: &mut Uart) {
+fn muda_seta(direction: usize, estado: &mut bool) {
+    let mut uarto = open_uart();
     let mut seta = create_modbus(CONTROL_WRITE_SETA, &[0]);
     uarto.write(&seta).unwrap();
     println!("Direcao: {}",direction);
 
     if direction == 1 {
         println!("SETA DIREITA");
+        gpio::pisca_seta_direita(); 
 
-        let mut request = create_modbus(CONTROL_WRITE_SETA_DIREITA, &[0]);
+        let mut request = create_modbus(CONTROL_WRITE_SETA_DIREITA, &[if *estado { 0 } else { 1 }]);
+        *estado = !*estado;
         let mut response = [0; 5];
 
         match uarto.write(&request) {
@@ -243,8 +249,10 @@ fn muda_seta(direction: usize, mut uarto: &mut Uart) {
         }
     } else {
         println!("SETA ESQUERDA");
+        gpio::pisca_seta_esquerda(); 
 
-        let mut request = create_modbus(CONTROL_WRITE_SETA_ESQUERDA, &[0]);
+        let mut request = create_modbus(CONTROL_WRITE_SETA_ESQUERDA, &[if *estado { 0 } else { 1 }]);
+        *estado = !*estado;
         let mut response = [0; 5];
 
         match uarto.write(&request) {
@@ -267,11 +275,13 @@ pub fn open_uart() -> Uart {
     uarto 
 }
 
-pub fn farol() {
+pub fn farol(carro: &CarControl) {
     let mut uarto = open_uart();
     let mut envia = create_modbus(CONTROL_FAROL, &[]);
+    let mut car_state = carro.get_car_state();
+
     uarto.write(&envia).unwrap(); 
-    sleep(Duration::from_millis(500));
+    sleep(Duration::from_millis(50));
 
     let mut leitura = vec![0; 7];
     match uarto.read(&mut leitura) {
@@ -282,14 +292,14 @@ pub fn farol() {
     let byte_da_seta = leitura[2];
     let ultimos_dois_bits = byte_da_seta & 0b00000011;
     // println!("Os dois últimos bits do byte do FAROL: {:02b}", ultimos_dois_bits);
-    if ultimos_dois_bits == 0b10 {muda_farol(1);} // farol alto
-    else if ultimos_dois_bits == 0b01 {muda_farol(2);} // farol baixo
+    if ultimos_dois_bits == 0b10 {muda_farol(1, &mut car_state.farol_alto);} // farol alto
+    else if ultimos_dois_bits == 0b01 {muda_farol(2, &mut car_state.farol_baixo);} // farol baixo
         
 
     drop(uarto);
 }
 
-pub fn muda_farol(farol_direcao: usize){
+pub fn muda_farol(farol_direcao: usize, estado: &mut bool){
     let mut uarto = open_uart();
     let mut farol = create_modbus(CONTROL_WRITE_FAROL, &[0]);
     uarto.write(&farol).unwrap();
@@ -297,9 +307,13 @@ pub fn muda_farol(farol_direcao: usize){
     let mut success = false;
     if farol_direcao == 2 { 
         println!("FAROL BAIXO");
-        gpio::farol_baixo(); 
+        if *estado == true { gpio::farol_baixo_desliga(); }
+        else { gpio::farol_baixo_liga(); }
+        
 
-        let mut request = create_modbus(CONTROL_WRITE_FAROL_BAIXO, &[0]);
+        //println!("Estado FAROL BAIXO: {}",estado);
+        let mut request = create_modbus(CONTROL_WRITE_FAROL_BAIXO, &[if *estado { 0 } else { 1 }]);
+        *estado = !*estado;
         let mut response = [0; 5];
 
         match uarto.write(&request) {
@@ -315,9 +329,13 @@ pub fn muda_farol(farol_direcao: usize){
 
     } else {
         println!("FAROL ALTO");
-        gpio::farol_alto(); 
+        if *estado == true { gpio::farol_alto_desliga(); }
+        else { gpio::farol_alto_liga(); }
 
-        let mut request = create_modbus(CONTROL_WRITE_FAROL_ALTO, &[0]);
+        //println!("Estado FAROL ALTO: {}",estado);
+        let mut request = create_modbus(CONTROL_WRITE_FAROL_ALTO, &[if *estado { 0 } else { 1 }]);
+        *estado = !*estado;
+
         let mut response = [0; 5];
 
         match uarto.write(&request) {
@@ -334,4 +352,16 @@ pub fn muda_farol(farol_direcao: usize){
     }
 
     drop(uarto);
+}
+
+pub fn desliga() {
+    let mut uarto = open_uart();
+    let mut request = create_modbus(CONTROL_WRITE_FAROL_ALTO, &[0]);
+    uarto.write(&request).unwrap();
+    let mut request = create_modbus(CONTROL_WRITE_FAROL_BAIXO, &[0]);
+    uarto.write(&request).unwrap();
+    let mut request = create_modbus(CONTROL_WRITE_SETA_ESQUERDA, &[0]);
+    uarto.write(&request).unwrap();
+    let mut request = create_modbus(CONTROL_WRITE_SETA_DIREITA, &[0]);
+    uarto.write(&request).unwrap();
 }

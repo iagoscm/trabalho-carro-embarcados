@@ -6,6 +6,10 @@ pub struct CarState {
     pub engine_control: EngineControl,
     pub current_speed: f64,
     pub current_direction: Direction,
+    pub seta_esquerda: bool,  
+    pub seta_direita: bool,  
+    pub farol_baixo: bool,   
+    pub farol_alto: bool,
 }
 
 pub struct CarControl {
@@ -19,6 +23,10 @@ impl CarControl {
             engine_control,
             current_speed: 0.0,
             current_direction: Direction::Idle,
+            seta_esquerda: false,
+            seta_direita: false,
+            farol_baixo: false,
+            farol_alto: false,
         };
 
         Self {

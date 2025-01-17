@@ -5,46 +5,24 @@ mod car;
 mod common;
 
 use uart::modbus;
+use car::control::CarControl;
+use std::process::exit;
+use ctrlc;
 
 fn main() {
-  // a cada 50ms pedir temperatura do motor, e ler comando das setas
+    let mut meu_carro = CarControl::new();
+
+    ctrlc::set_handler(move || {
+      println!("Ctrl+C pressionado! Finalizando o programa.");
+      gpio::gpio::desliga();
+      modbus::desliga();
+      exit(0); 
+    }).expect("Erro ao configurar o handler de Ctrl+C");
+
     loop {
-        // let temp_motor_data = create_modbus(LE_TEMP, &[]);
-        // let seta_esquerda_data = create_modbus(CONTROL_SETA_ESQUERDA, &[1]);
-        // let seta_direita_data = create_modbus(CONTROL_SETA_DIREITA, &[1]);
-
-        // let response_temp = read_modbus(LE_TEMP, &temp_motor_data);
-        // let response_seta_esquerda = read_modbus(CONTROL_SETA_ESQUERDA, &seta_esquerda_data);
-        // let response_seta_direita = read_modbus(CONTROL_SETA_DIREITA, &seta_direita_data);
-
-        // match response_temp {
-        //     Ok(response) => {
-        //         println!("Temperatura do motor: {:?}", response);
-        //     }
-        //     Err(e) => {
-        //         println!("Erro ao ler temperatura: {}", e);
-        //     }
-        // }
-
-        // match response_seta_esquerda {
-        //     Ok(response) => {
-        //         println!("Comando de seta à esquerda recebido: {:?}", response);
-        //     }
-        //     Err(e) => {
-        //         println!("Erro ao ler comando de seta à esquerda: {}", e);
-        //     }
-        // }
-
-        // match response_seta_direita {
-        //     Ok(response) => {
-        //         println!("Comando de seta à direita recebido: {:?}", response);
-        //     }
-        //     Err(e) => {
-        //         println!("Erro ao ler comando de seta à direita: {}", e);
-        //     }
-        // }
-        modbus::temp_motor();
-        modbus::seta();
+        // modbus::temp_motor();
+        modbus::seta(&meu_carro);
+        modbus::farol(&meu_carro);
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
 }
