@@ -1,5 +1,7 @@
 use std::thread::sleep;
 use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 use rppal::uart::Queue;
 use rppal::uart::{Parity, Uart};
@@ -69,6 +71,18 @@ pub const CONTROL_CRUISE_WRITE: ModbusOperation = ModbusOperation {
     code: 0x06,
     subcode: 0x01,  
     qtd: Some(1),
+};
+
+pub const CONTROL_VELOCIDADE: ModbusOperation = ModbusOperation {
+    code: 0x06,
+    subcode: 0x03,  
+    qtd: Some(4),
+};
+
+pub const CONTROL_RPM: ModbusOperation = ModbusOperation {
+    code: 0x06,
+    subcode: 0x07,  
+    qtd: Some(4),
 };
 
 pub const CONTROL_FAROL: ModbusOperation = ModbusOperation {
@@ -188,7 +202,7 @@ pub fn temp_motor() {
     drop(uarto);
 }
 
-pub fn seta(carro: &CarControl) {
+pub fn seta(carro: &CarControl,parar_direita: Arc<Mutex<bool>>, parar_esquerda: Arc<Mutex<bool>>) {
     let mut uarto = open_uart();
     let mut envia = create_modbus(CONTROL_READ_SETA, &[]);
     let mut car_state = carro.get_car_state();
@@ -201,15 +215,14 @@ pub fn seta(carro: &CarControl) {
 
     let byte_da_seta = leitura[2];
     let ultimos_dois_bits = byte_da_seta & 0b00000011;
-    //println!("Os dois últimos bits do byte da seta: {:02b}", ultimos_dois_bits);
-    if ultimos_dois_bits == 0b10 {muda_seta(1, &mut car_state.seta_direita);} // direita
-    else if ultimos_dois_bits == 0b01 {muda_seta(2, &mut car_state.seta_esquerda);} // esquerda
-        
+    println!("Os dois últimos bits do byte da seta: {:02b}", ultimos_dois_bits);
+    if ultimos_dois_bits == 0b10 {muda_seta(1, &mut car_state.seta_direita,parar_direita, parar_esquerda);} // direita
+    else if ultimos_dois_bits == 0b01 {muda_seta(2, &mut car_state.seta_esquerda,parar_direita, parar_esquerda);} // esquerda
     
     drop(uarto);
 }
 
-fn muda_seta(direction: usize, estado: &mut bool) {
+fn muda_seta(direction: usize, estado: &mut bool,parar_direita: Arc<Mutex<bool>>, parar_esquerda: Arc<Mutex<bool>>) {
     let mut uarto = open_uart();
     let mut seta = create_modbus(CONTROL_WRITE_SETA, &[0]);
     uarto.write(&seta).unwrap();
@@ -217,7 +230,16 @@ fn muda_seta(direction: usize, estado: &mut bool) {
 
     if direction == 1 {
         println!("SETA DIREITA");
-        //gpio::pisca_seta_direita(); 
+    
+        if !*estado {
+            *parar_direita.lock().unwrap() = false;
+            let parar_clone = Arc::clone(&parar_direita);
+            thread::spawn(move || {
+                gpio::pisca_seta_direita(parar_clone);
+            });
+        } else {
+            *parar_direita.lock().unwrap() = true;
+        }
 
         let mut request = create_modbus(CONTROL_WRITE_SETA_DIREITA, &[if *estado { 0 } else { 1 }]);
         *estado = !*estado;
@@ -228,7 +250,16 @@ fn muda_seta(direction: usize, estado: &mut bool) {
 
     } else {
         println!("SETA ESQUERDA");
-        //gpio::pisca_seta_esquerda(); 
+        
+        if !*estado {
+            *parar_esquerda.lock().unwrap() = false;
+            let parar_clone = Arc::clone(&parar_esquerda);
+            thread::spawn(move || {
+                gpio::pisca_seta_esquerda(parar_clone);
+            });
+        } else {
+            *parar_esquerda.lock().unwrap() = true;
+        }
 
         let mut request = create_modbus(CONTROL_WRITE_SETA_ESQUERDA, &[if *estado { 0 } else { 1 }]);
         *estado = !*estado;
@@ -289,7 +320,7 @@ pub fn muda_farol(farol_direcao: usize, estado: &mut bool){
 
     } else {
         println!("FAROL ALTO");
-        if *estado == true { gpio::farol_alto_desliga(); println!("Liga farol baixo"); }
+        if *estado == true { gpio::farol_alto_desliga(); println!("Desliga farol alto"); }
         else { gpio::farol_alto_liga(); println!("Liga farol alto"); }
         //println!("Estado FAROL ALTO: {}",estado);
         let mut request = create_modbus(CONTROL_WRITE_FAROL_ALTO, &[if *estado { 0 } else { 1 }]);
@@ -345,4 +376,46 @@ pub fn desliga() {
     uarto.write(&request).unwrap();
     let mut request = create_modbus(CONTROL_WRITE_SETA_DIREITA, &[0]);
     uarto.write(&request).unwrap();
+
+    let valor: f32 = 0.0;
+    let bytes = valor.to_le_bytes();
+    let mut request = create_modbus(CONTROL_VELOCIDADE, &bytes);
+    uarto.write(&request).unwrap();
+    let mut request = create_modbus(CONTROL_RPM, &bytes);
+    uarto.write(&request).unwrap();
+
+}
+
+pub fn velocimetro() {
+    // CONTROL_VELOCIDADE e CONTROL_RPM
+    let mut uarto = open_uart();
+
+    let valor: f32 = 34.5;
+    let bytes = valor.to_le_bytes();
+    let mut envia = create_modbus(CONTROL_VELOCIDADE, &bytes);
+    match uarto.write(&envia) {
+        Ok(bytes_escritos) => {
+            println!("Escritos {} bytes com sucesso!", bytes_escritos);
+        },
+        Err(e) => {
+            println!("Erro ao escrever dados: {}", e);
+        },
+    }
+
+    sleep(Duration::from_millis(50));
+
+    let valor2: f32 = 1234.43;
+    let bytes2 = valor2.to_le_bytes();
+    let mut envia = create_modbus(CONTROL_RPM, &bytes2);
+    match uarto.write(&envia) {
+        Ok(bytes_escritos) => {
+            println!("Escritos {} bytes com sucesso!", bytes_escritos);
+        },
+        Err(e) => {
+            println!("Erro ao escrever dados: {}", e);
+        },
+    }
+    sleep(Duration::from_millis(50));
+
+    drop(uarto);
 }
