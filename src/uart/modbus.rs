@@ -8,7 +8,7 @@ use rppal::uart::{Parity, Uart};
 
 use crate::uart::crc;
 use crate::gpio::gpio;
-use crate::car::control::CarControl;
+use crate::car::control::{ CarControl, CruiseControl, CarState };
 
 const BAUD_RATE: u32 = 115200;
 const DATA_BITS: u8 = 8;
@@ -73,17 +73,31 @@ pub const CONTROL_CRUISE_WRITE: ModbusOperation = ModbusOperation {
     qtd: Some(1),
 };
 
-pub const CONTROL_VELOCIDADE: ModbusOperation = ModbusOperation {
+pub const CONTROL_VELOCIDADE_WRITE: ModbusOperation = ModbusOperation {
     code: 0x06,
     subcode: 0x03,  
     qtd: Some(4),
 };
 
-pub const CONTROL_RPM: ModbusOperation = ModbusOperation {
+pub const CONTROL_VELOCIDADE_READ: ModbusOperation = ModbusOperation {
+    code: 0x03,
+    subcode: 0x03,  
+    qtd: Some(4),
+};
+
+
+pub const CONTROL_RPM_WRITE: ModbusOperation = ModbusOperation {
     code: 0x06,
     subcode: 0x07,  
     qtd: Some(4),
 };
+
+pub const CONTROL_RPM_READ: ModbusOperation = ModbusOperation {
+    code: 0x03,
+    subcode: 0x07,  
+    qtd: Some(4),
+};
+
 
 pub const CONTROL_FAROL: ModbusOperation = ModbusOperation {
     code: 0x03,
@@ -339,31 +353,136 @@ const CANCEL: u8 = 0x02;
 const SET_PLUS: u8 = 0x04;
 const SET_MINUS: u8 = 0x10;
 
-pub fn cruise_control(carro: &CarControl) {
+pub struct CruiseControlState {
+    pub is_active: bool,
+    pub debounce: bool,
+}
+
+impl CruiseControlState {
+
+    pub fn process_button_press(&mut self, uarto: &mut Uart, byte: u8) {
+    if !self.debounce {
+        match byte {
+            0b00000001 if !self.is_active => {
+                println!("Cruise Control Ativado!");
+                self.is_active = true;
+            },
+            0b00000010 if self.is_active => {
+                println!("Cruise Control Cancelado!");
+                self.is_active = false;
+            },
+            0b00000100 if self.is_active => {
+                println!("Cruise Control - Aumentando velocidade!");
+		println!("Cruise Control - Aumentando velocidade!");
+                let current_speed = read_speed_from_modbus(uarto) + 1.0;
+                velocimetro(current_speed);
+                println!("Ajustando para velocidade: {}", current_speed);
+            },
+            0b00001000 if self.is_active => {
+                println!("Cruise Control - Diminuindo velocidade!");
+		println!("Cruise Control - Diminuindo velocidade!");
+                let mut current_speed = read_speed_from_modbus(uarto) - 1.0;
+                if current_speed < 0.0 {
+                    current_speed = 0.0;
+                }
+                velocimetro(current_speed);
+                println!("Ajustando para velocidade: {}", current_speed);
+            },
+            _ => {},
+        }
+
+        self.debounce = true;
+        }
+    }
+
+    pub fn release_button(&mut self) {
+    	self.debounce = false; 
+    }
+
+}
+
+
+
+pub fn cruise_control(carro: &CarControl, cruise_state: &mut CruiseControlState) {
     let mut uarto = open_uart();
     let mut envia = create_modbus(CONTROL_CRUISE_READ, &[]);
     let mut car_state = carro.get_car_state();
 
-    uarto.write(&envia).unwrap(); 
+    uarto.write(&envia).unwrap();
     sleep(Duration::from_millis(50));
 
-    let mut leitura = vec![0; 4]; 
+    let mut leitura = vec![0; 7];
     uarto.read(&mut leitura);
 
     let byte_do_cruise = leitura[2];
-    match byte_do_cruise {
-        0b00000001 => println!("Comando: RES"),
-        0b00000010 => println!("Comando: CANCEL"),
-        0b00000100 => println!("Comando: SET +"),
-        0b00001000 => println!("Comando: SET -"),
-        _ => println!("Comando desconhecido: {:08b}",byte_do_cruise),
-    }
+    cruise_state.process_button_press(&mut uarto, byte_do_cruise);
 
-    let mut farol = create_modbus(CONTROL_CRUISE_WRITE, &[0]);
-    uarto.write(&farol).unwrap();
+/*    match byte_do_cruise {
+        0b00000001 => {
+            if !cruise_state.is_active {
+                println!("Cruise Control Ativado!");
+                let current_speed = read_speed_from_modbus(&mut uarto);
+                cruise_state.is_active = true;
+                velocimetro(current_speed); // Atualiza o velocímetro
+            }
+        },
+        0b00000010 => {
+            if cruise_state.is_active {
+                println!("Cruise Control Cancelado!");
+                let mut request = create_modbus(CONTROL_CRUISE_WRITE, &[CANCEL]);
+                uarto.write(&request).unwrap();
+                cruise_state.is_active = false;  // Desativa o Cruise Control
+            }
+        },
+        0b00000100 => { // +
+            if cruise_state.is_active && !cruise_state.debounce {
+                println!("Cruise Control - Aumentando velocidade!");
+                let current_speed = read_speed_from_modbus(&mut uarto) + 1.0;
+                velocimetro(current_speed);
+                cruise_state.debounce = true; // Ativa o debounce após a ação
+            }
+        },
+        0b00001000 => { // -
+            if cruise_state.is_active && !cruise_state.debounce {
+                println!("Cruise Control - Diminuindo velocidade!");
+                let mut current_speed = read_speed_from_modbus(&mut uarto) - 1.0;
+                if current_speed < 0.0 {
+                    current_speed = 0.0;
+                }
+                velocimetro(current_speed);
+                cruise_state.debounce = true; // Ativa o debounce após a ação
+            }
+        },
+        _ => {
+            
+        }
+    }
+*/
 
     drop(uarto);
+    cruise_state.release_button();  // Libera o debounce quando o botão for liberado
+}
 
+fn read_speed_from_modbus(uarto: &mut Uart) -> f32 {
+    let mut envia = create_modbus(CONTROL_VELOCIDADE_READ, &[]); 
+    uarto.write(&envia).unwrap();
+    sleep(Duration::from_millis(50));
+
+    let mut leitura = vec![0; 7];
+    uarto.read(&mut leitura).unwrap();
+    
+    f32::from_le_bytes(leitura[3..7].try_into().expect("Falha na conversão para f32"))
+}
+
+fn read_rpm_from_modbus(uarto: &mut Uart) -> f32 {
+    let mut envia = create_modbus(CONTROL_RPM_READ, &[]); 
+    uarto.write(&envia).unwrap();
+    sleep(Duration::from_millis(50));
+
+    let mut leitura = vec![0; 7];
+    uarto.read(&mut leitura).unwrap();
+    
+    f32::from_le_bytes(leitura[3..7].try_into().expect("Falha na conversão para f32"))
 }
 
 pub fn desliga() {
@@ -376,23 +495,31 @@ pub fn desliga() {
     uarto.write(&request).unwrap();
     let mut request = create_modbus(CONTROL_WRITE_SETA_DIREITA, &[0]);
     uarto.write(&request).unwrap();
+    let mut request = create_modbus(CONTROL_CRUISE_READ, &[0]);
+    uarto.write(&request).unwrap();
+    let mut request = create_modbus(CONTROL_CRUISE_WRITE, &[0]);
+    uarto.write(&request).unwrap();
 
     let valor: f32 = 0.0;
     let bytes = valor.to_le_bytes();
-    let mut request = create_modbus(CONTROL_VELOCIDADE, &bytes);
+    let mut request = create_modbus(CONTROL_VELOCIDADE_WRITE, &bytes);
     uarto.write(&request).unwrap();
-    let mut request = create_modbus(CONTROL_RPM, &bytes);
+    let mut request = create_modbus(CONTROL_RPM_WRITE, &bytes);
     uarto.write(&request).unwrap();
 
+    sleep(Duration::from_millis(50));
+    
 }
 
-pub fn velocimetro() {
+pub fn velocimetro(speed: f32) {
     // CONTROL_VELOCIDADE e CONTROL_RPM
     let mut uarto = open_uart();
-
-    let valor: f32 = 34.5;
+    println!("{}", speed);    
+    //let mut car_state = carro.get_car_state();
+    let valor: f32 = speed;
     let bytes = valor.to_le_bytes();
-    let mut envia = create_modbus(CONTROL_VELOCIDADE, &bytes);
+    let mut envia = create_modbus(CONTROL_VELOCIDADE_WRITE, &bytes);
+    println!("{:?}", bytes);
     match uarto.write(&envia) {
         Ok(bytes_escritos) => {
             println!("Escritos {} bytes com sucesso!", bytes_escritos);
@@ -404,9 +531,9 @@ pub fn velocimetro() {
 
     sleep(Duration::from_millis(50));
 
-    let valor2: f32 = 1234.43;
+    let valor2: f32 = speed;
     let bytes2 = valor2.to_le_bytes();
-    let mut envia = create_modbus(CONTROL_RPM, &bytes2);
+    let mut envia = create_modbus(CONTROL_RPM_WRITE, &bytes2);
     match uarto.write(&envia) {
         Ok(bytes_escritos) => {
             println!("Escritos {} bytes com sucesso!", bytes_escritos);

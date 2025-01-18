@@ -6,12 +6,17 @@ mod common;
 
 use uart::modbus;
 use car::control::CarControl;
+use uart::modbus::CruiseControlState;
 use std::process::exit;
 use ctrlc;
 use std::sync::{Arc, Mutex};
 
 fn main() {
     let mut meu_carro = CarControl::new();
+    let mut cruise_state = CruiseControlState {
+	    is_active: false,
+	    debounce: false,
+    };
 
     ctrlc::set_handler(move || {
       println!("\nCtrl+C pressionado! Finalizando o programa.");
@@ -21,7 +26,7 @@ fn main() {
       exit(0); 
     }).expect("\nErro ao configurar o handler de Ctrl+C");
 
-    modbus::velocimetro();
+    modbus::velocimetro(0.0);
     gpio::gpio::luz_motor();
     gpio::gpio::luz_freio();
 
@@ -32,7 +37,7 @@ fn main() {
         //modbus::temp_motor();
         modbus::seta(&meu_carro, Arc::clone(&parar_direita), Arc::clone(&parar_esquerda));
         modbus::farol(&meu_carro);
-        //modbus::cruise_control(&meu_carro);
+        //modbus::cruise_control(&meu_carro, &mut cruise_state);
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
 

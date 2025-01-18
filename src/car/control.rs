@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 pub struct CarState {
     pub engine_control: EngineControl,
-    pub current_speed: f64,
+    pub current_speed: f32,
     pub current_direction: Direction,
     pub seta_esquerda: bool,  
     pub seta_direita: bool,  
@@ -14,6 +14,13 @@ pub struct CarState {
 
 pub struct CarControl {
     car: Arc<Mutex<CarState>>,
+}
+
+pub enum CruiseControl {
+    Res,
+    Cancel,
+    Plus,
+    Minus,
 }
 
 impl CarControl {
