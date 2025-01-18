@@ -1,6 +1,7 @@
 use crate::car::control::CarControl;
 use crate::common::Direction;
 
+// usar cargo test -- --test-threads=1
 
 #[cfg(test)]
 mod tests {

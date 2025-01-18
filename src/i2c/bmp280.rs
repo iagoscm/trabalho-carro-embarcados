@@ -1,6 +1,6 @@
 use bmp280::Bmp280Builder;
 
-pub fn read_bmp280(path: &str, address: u16) -> Result<(f32, f32), String> {
+pub fn read_bmp280(path: &str, address: u16) -> Result<f32, String> {
     let mut dev = Bmp280Builder::new()
         .path(path)
         .address(address)
@@ -8,10 +8,9 @@ pub fn read_bmp280(path: &str, address: u16) -> Result<(f32, f32), String> {
         .map_err(|e| e.to_string())?;
 
     let temperature = dev.temperature_celsius().map_err(|e| e.to_string())?;
-    let pressure = dev.pressure_kpa().map_err(|e| e.to_string())?;
 //    todo!("Converter kpa para hpa");
 
-    Ok((temperature, pressure))
+    Ok(temperature)
 }
 
 /*
