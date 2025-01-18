@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 bmp280 = "0.4.0"
-i2cdev = "0.4.4"
+i2cdev = "0.6.1"
 linux-embedded-hal = "0.4.0"
-rppal = "0.18.0"
+rppal = "0.22.1"
 ctrlc = "3.1"
