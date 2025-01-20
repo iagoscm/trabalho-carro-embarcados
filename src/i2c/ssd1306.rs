@@ -15,6 +15,7 @@ use std::time::Duration;
 use i2cdev::linux::LinuxI2CDevice;
 use i2cdev::core::I2CDevice;
 use crate::i2c::bmp280::read_bmp280;
+use crate::car::control::CarControl;
 
 pub const SENSOR_ADDR: u16 = 0x3C;
 
@@ -37,7 +38,7 @@ const i2c_device: &str = "/dev/i2c-1";
 const device_address: u16 = 0x76;
 
 impl SSD1306 {
-    pub fn new() -> Self {
+    pub fn new(carro: &CarControl) -> Self {
         let i2c = I2c::new().unwrap();
 
         let i2cdev = LinuxI2CDevice::new("/dev/i2c-1", SENSOR_ADDR).unwrap();
@@ -68,14 +69,15 @@ impl SSD1306 {
             i2cdev,
         };
         ssd1306.display.init().unwrap();
-        ssd1306.refresh_screen();
+        ssd1306.refresh_screen(&carro);
 
         ssd1306
     }
 
-    pub fn refresh_screen(&mut self) {
+    pub fn refresh_screen(&mut self, carro: &CarControl) {
         self.display.clear(BinaryColor::Off).unwrap();
         self.render_background();
+	    self.update_info(&carro);
         self.render_info();
         self.display.flush().unwrap();
     }
@@ -83,28 +85,37 @@ impl SSD1306 {
     fn render_background(&mut self) {
 
         let text_style = MonoTextStyleBuilder::new()
-            .font(&ascii::FONT_4X6)
+            .font(&ascii::FONT_5X8)
             .text_color(BinaryColor::On)
             .build();
 
-        Text::new("Carro Embas", Point::new(0,5),text_style)
+        Text::new("Carro da Alexia e do Iago", Point::new(0,5),text_style)
             .draw(&mut self.display)
             .unwrap();
         
     }
 
-    fn render_info(&mut self) {
+    fn update_info(&mut self, carro: &CarControl){
+        let mut car_state = carro.get_car_state();
 
-        // Lendo temperatura
         let temp = read_bmp280(i2c_device, device_address);
-        self.car.temperature = temp.expect("REASON"); // solução momentanea pros prints de temperatura
+        self.car.temperature = temp.expect("REASON");
+        self.car.rpm = car_state.current_rpm;
+        self.car.speed = car_state.current_speed;
+        self.car.distance = car_state.distance;
+        self.car.temp_alert = car_state.temp_alert;
+        self.car.cruise_control = car_state.cruise_control;
+    }
 
+    fn render_info(&mut self) {
+        
         let text_style = MonoTextStyleBuilder::new()
-            .font(&ascii::FONT_5X8)
+            .font(&ascii::FONT_6X10)
             .text_color(BinaryColor::On)
             .build();
         
         // A ser substituido com funções de update 
+	    let vel_text = format!("Velocidade: {:.1}km/h", self.car.speed);
         let temp_text = format!("{:.1}°C", self.car.temperature);
         let rpm_text = format!("RPM: {:.1}", self.car.rpm);
         let distance_text = format!("Distância: {:.1} km", self.car.distance);
@@ -120,6 +131,10 @@ impl SSD1306 {
             };
 
         //Sequencia de prints na tela OLED
+        Text::new(&vel_text, Point::new(0, 15), text_style)
+            .draw(&mut self.display)
+            .unwrap();
+                
         Text::new(&temp_text, Point::new(0, 22), text_style)
             .draw(&mut self.display)
             .unwrap();

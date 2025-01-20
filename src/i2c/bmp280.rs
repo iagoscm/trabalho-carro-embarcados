@@ -8,22 +8,7 @@ pub fn read_bmp280(path: &str, address: u16) -> Result<f32, String> {
         .map_err(|e| e.to_string())?;
 
     let temperature = dev.temperature_celsius().map_err(|e| e.to_string())?;
-//    todo!("Converter kpa para hpa");
 
     Ok(temperature)
 }
 
-/*
-Codigo de exemplo para puxar a temperatura:
-  match i2c::bmp280::read_bmp280("/dev/i2c-1", 0x76) {
-      Ok((temperature, pressure)) => {
-      // Exibe os valores de temperatura e pressão
-          println!("Temperatura: {:.2} ºC", temperature);
-          println!("Pressão: {:.2} kPa", pressure);
-        }
-      Err(e) => {
-          println!("Erro ao ler o sensor: {}", e);
-        }
-  }
-
-*/

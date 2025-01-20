@@ -9,6 +9,7 @@ use rppal::uart::{Parity, Uart};
 use crate::uart::crc;
 use crate::gpio::gpio;
 use crate::car::control::{ CarControl, CruiseControl, CarState };
+use crate::common::{Direction, Car};
 
 const BAUD_RATE: u32 = 115200;
 const DATA_BITS: u8 = 8;
@@ -200,18 +201,23 @@ pub struct ModbusOperation {
 }
 
 
-pub fn temp_motor() {
+pub fn temp_motor(carro: &CarControl) {
     let mut uarto = open_uart();
     let envia = create_modbus(LE_TEMP, &[]);
+    let mut car_state = carro.get_car_state();
 
     uarto.write(envia.as_slice()).unwrap(); 
     sleep(Duration::from_millis(50));
+    car_state.temp_alert = false;
     
     let mut leitura = vec![0; 7];
     let response = uarto.read(&mut leitura).unwrap();
     let float_value = f32::from_le_bytes(leitura[3..7].try_into().expect("Falha na conversão para f32"));
 
-    println!("Valor temp: {}", float_value);
+    if float_value > 114.0 {
+        gpio::luz_motor();
+	    car_state.temp_alert = true;
+    }
 
     drop(uarto);
 }
@@ -229,7 +235,7 @@ pub fn seta(carro: &CarControl,parar_direita: Arc<Mutex<bool>>, parar_esquerda: 
 
     let byte_da_seta = leitura[2];
     let ultimos_dois_bits = byte_da_seta & 0b00000011;
-    println!("Os dois últimos bits do byte da seta: {:02b}", ultimos_dois_bits);
+    //println!("Os dois últimos bits do byte da seta: {:02b}", ultimos_dois_bits);
     if ultimos_dois_bits == 0b10 {muda_seta(1, &mut car_state.seta_direita,parar_direita, parar_esquerda);} // direita
     else if ultimos_dois_bits == 0b01 {muda_seta(2, &mut car_state.seta_esquerda,parar_direita, parar_esquerda);} // esquerda
     
@@ -240,10 +246,10 @@ fn muda_seta(direction: usize, estado: &mut bool,parar_direita: Arc<Mutex<bool>>
     let mut uarto = open_uart();
     let mut seta = create_modbus(CONTROL_WRITE_SETA, &[0]);
     uarto.write(&seta).unwrap();
-    println!("Direcao: {}",direction);
+    //println!("Direcao: {}",direction);
 
     if direction == 1 {
-        println!("SETA DIREITA");
+        println!("Seta Direita");
     
         if !*estado {
             *parar_direita.lock().unwrap() = false;
@@ -263,7 +269,7 @@ fn muda_seta(direction: usize, estado: &mut bool,parar_direita: Arc<Mutex<bool>>
         uarto.read(&mut response);
 
     } else {
-        println!("SETA ESQUERDA");
+        println!("Seta Esquerda");
         
         if !*estado {
             *parar_esquerda.lock().unwrap() = false;
@@ -319,7 +325,7 @@ pub fn muda_farol(farol_direcao: usize, estado: &mut bool){
     
     let mut success = false;
     if farol_direcao == 2 { 
-        println!("FAROL BAIXO | Estado: {}",*estado);
+        //println!("FAROL BAIXO | Estado: {}",*estado);
         if *estado == true { gpio::farol_baixo_desliga(); println!("Desliga farol baixo"); }
         else { gpio::farol_baixo_liga(); println!("Liga farol baixo"); }
         
@@ -333,7 +339,7 @@ pub fn muda_farol(farol_direcao: usize, estado: &mut bool){
         uarto.read(&mut response);
 
     } else {
-        println!("FAROL ALTO");
+        //println!("FAROL ALTO");
         if *estado == true { gpio::farol_alto_desliga(); println!("Desliga farol alto"); }
         else { gpio::farol_alto_liga(); println!("Liga farol alto"); }
         //println!("Estado FAROL ALTO: {}",estado);
@@ -353,57 +359,7 @@ const CANCEL: u8 = 0x02;
 const SET_PLUS: u8 = 0x04;
 const SET_MINUS: u8 = 0x10;
 
-pub struct CruiseControlState {
-    pub is_active: bool,
-    pub debounce: bool,
-}
-
-impl CruiseControlState {
-
-    pub fn process_button_press(&mut self, uarto: &mut Uart, byte: u8) {
-    if !self.debounce {
-        match byte {
-            0b00000001 if !self.is_active => {
-                println!("Cruise Control Ativado!");
-                self.is_active = true;
-            },
-            0b00000010 if self.is_active => {
-                println!("Cruise Control Cancelado!");
-                self.is_active = false;
-            },
-            0b00000100 if self.is_active => {
-                println!("Cruise Control - Aumentando velocidade!");
-		println!("Cruise Control - Aumentando velocidade!");
-                let current_speed = read_speed_from_modbus(uarto) + 1.0;
-                velocimetro(current_speed);
-                println!("Ajustando para velocidade: {}", current_speed);
-            },
-            0b00001000 if self.is_active => {
-                println!("Cruise Control - Diminuindo velocidade!");
-		println!("Cruise Control - Diminuindo velocidade!");
-                let mut current_speed = read_speed_from_modbus(uarto) - 1.0;
-                if current_speed < 0.0 {
-                    current_speed = 0.0;
-                }
-                velocimetro(current_speed);
-                println!("Ajustando para velocidade: {}", current_speed);
-            },
-            _ => {},
-        }
-
-        self.debounce = true;
-        }
-    }
-
-    pub fn release_button(&mut self) {
-    	self.debounce = false; 
-    }
-
-}
-
-
-
-pub fn cruise_control(carro: &CarControl, cruise_state: &mut CruiseControlState) {
+pub fn cruise_control(carro: &CarControl) {
     let mut uarto = open_uart();
     let mut envia = create_modbus(CONTROL_CRUISE_READ, &[]);
     let mut car_state = carro.get_car_state();
@@ -413,77 +369,59 @@ pub fn cruise_control(carro: &CarControl, cruise_state: &mut CruiseControlState)
 
     let mut leitura = vec![0; 7];
     uarto.read(&mut leitura);
-
     let byte_do_cruise = leitura[2];
-    cruise_state.process_button_press(&mut uarto, byte_do_cruise);
 
-/*    match byte_do_cruise {
-        0b00000001 => {
-            if !cruise_state.is_active {
-                println!("Cruise Control Ativado!");
-                let current_speed = read_speed_from_modbus(&mut uarto);
-                cruise_state.is_active = true;
-                velocimetro(current_speed); // Atualiza o velocímetro
-            }
+    match byte_do_cruise {
+        0b00000001 if !car_state.cruise_control => {
+            println!("Cruise Control Ativado!");
+            let mut request = create_modbus(CONTROL_CRUISE_WRITE, &[1]);
+            let mut response = [0; 5];
+            uarto.write(&request);
+            car_state.cruise_control = true;
+            car_state.current_direction = Direction::Idle;	
+            sleep(Duration::from_millis(50));
+            uarto.read(&mut response);
         },
-        0b00000010 => {
-            if cruise_state.is_active {
-                println!("Cruise Control Cancelado!");
-                let mut request = create_modbus(CONTROL_CRUISE_WRITE, &[CANCEL]);
-                uarto.write(&request).unwrap();
-                cruise_state.is_active = false;  // Desativa o Cruise Control
-            }
+        0b00000010 if car_state.cruise_control => {
+            println!("Cruise Control Cancelado!");
+            let mut request = create_modbus(CONTROL_CRUISE_WRITE, &[2]);
+            let mut response = [0; 5];
+            uarto.write(&request);
+            car_state.cruise_control = false;
+            sleep(Duration::from_millis(50));
+            uarto.read(&mut response);
         },
-        0b00000100 => { // +
-            if cruise_state.is_active && !cruise_state.debounce {
-                println!("Cruise Control - Aumentando velocidade!");
-                let current_speed = read_speed_from_modbus(&mut uarto) + 1.0;
-                velocimetro(current_speed);
-                cruise_state.debounce = true; // Ativa o debounce após a ação
+        0b00000100 if car_state.cruise_control => {
+            println!("Cruise Control - Aumentando velocidade!");
+	        let mut request = create_modbus(CONTROL_CRUISE_WRITE, &[4]);	    
+	        //car_state.cruise_control = false; 
+	        if car_state.current_speed < 200.01 {
+        	car_state.current_speed = car_state.current_speed + 1.0;
+		    car_state.current_rpm = car_state.current_rpm + 8.42;
+		    car_state.distance += 1.0;
+            velocimetro(car_state.current_speed);
             }
+	        println!("Ajustando para velocidade: {}", car_state.current_speed);
+            sleep(Duration::from_millis(500));
         },
-        0b00001000 => { // -
-            if cruise_state.is_active && !cruise_state.debounce {
-                println!("Cruise Control - Diminuindo velocidade!");
-                let mut current_speed = read_speed_from_modbus(&mut uarto) - 1.0;
-                if current_speed < 0.0 {
-                    current_speed = 0.0;
-                }
-                velocimetro(current_speed);
-                cruise_state.debounce = true; // Ativa o debounce após a ação
+        0b00001000 if car_state.cruise_control => {
+            println!("Cruise Control - Diminuindo velocidade!");
+	        let mut request = create_modbus(CONTROL_CRUISE_WRITE, &[8]);
+            //car_state.cruise_control = false;
+            if car_state.current_speed > 0.0 {
+            car_state.current_speed = car_state.current_speed - 1.0;
+		    car_state.current_rpm = car_state.current_rpm - 8.42;
+		    velocimetro(car_state.current_speed);
             }
+	        println!("Ajustando para velocidade: {}", car_state.current_speed);
+            sleep(Duration::from_millis(500));
         },
-        _ => {
-            
-        }
+        _ => {},
     }
-*/
 
     drop(uarto);
-    cruise_state.release_button();  // Libera o debounce quando o botão for liberado
 }
 
-fn read_speed_from_modbus(uarto: &mut Uart) -> f32 {
-    let mut envia = create_modbus(CONTROL_VELOCIDADE_READ, &[]); 
-    uarto.write(&envia).unwrap();
-    sleep(Duration::from_millis(50));
-
-    let mut leitura = vec![0; 7];
-    uarto.read(&mut leitura).unwrap();
-    
-    f32::from_le_bytes(leitura[3..7].try_into().expect("Falha na conversão para f32"))
-}
-
-fn read_rpm_from_modbus(uarto: &mut Uart) -> f32 {
-    let mut envia = create_modbus(CONTROL_RPM_READ, &[]); 
-    uarto.write(&envia).unwrap();
-    sleep(Duration::from_millis(50));
-
-    let mut leitura = vec![0; 7];
-    uarto.read(&mut leitura).unwrap();
-    
-    f32::from_le_bytes(leitura[3..7].try_into().expect("Falha na conversão para f32"))
-}
 
 pub fn desliga() {
     let mut uarto = open_uart();
@@ -499,12 +437,35 @@ pub fn desliga() {
     uarto.write(&request).unwrap();
     let mut request = create_modbus(CONTROL_CRUISE_WRITE, &[0]);
     uarto.write(&request).unwrap();
+    let mut request = create_modbus(LE_TEMP, &[0]);
+    uarto.write(&request).unwrap();
+    let mut request = create_modbus(CONTROL_READ_SETA, &[0]);
+    uarto.write(&request).unwrap();
+    let mut request = create_modbus(CONTROL_WRITE_SETA, &[0]);
+    uarto.write(&request).unwrap();
+    let mut request = create_modbus(CONTROL_FAROL, &[0]);
+    uarto.write(&request).unwrap();
+    let mut request = create_modbus(CONTROL_WRITE_FAROL, &[0]);
+    uarto.write(&request).unwrap();
+    let mut request = create_modbus(CONTROL_FAROL_ALTO, &[0]);
+    uarto.write(&request).unwrap();
+    let mut request = create_modbus(CONTROL_FAROL_BAIXO, &[0]);
+    uarto.write(&request).unwrap();
+    let mut request = create_modbus(CONTROL_WRITE_FAROL_ALTO, &[0]);
+    uarto.write(&request).unwrap();
 
     let valor: f32 = 0.0;
     let bytes = valor.to_le_bytes();
     let mut request = create_modbus(CONTROL_VELOCIDADE_WRITE, &bytes);
     uarto.write(&request).unwrap();
+    sleep(Duration::from_millis(50));
     let mut request = create_modbus(CONTROL_RPM_WRITE, &bytes);
+    uarto.write(&request).unwrap();
+    sleep(Duration::from_millis(50));
+    let mut request = create_modbus(CONTROL_RPM_READ, &bytes);
+    uarto.write(&request).unwrap();
+    sleep(Duration::from_millis(50));
+    let mut request = create_modbus(CONTROL_VELOCIDADE_READ, &bytes);
     uarto.write(&request).unwrap();
 
     sleep(Duration::from_millis(50));
@@ -514,15 +475,11 @@ pub fn desliga() {
 pub fn velocimetro(speed: f32) {
     // CONTROL_VELOCIDADE e CONTROL_RPM
     let mut uarto = open_uart();
-    println!("{}", speed);    
-    //let mut car_state = carro.get_car_state();
-    let valor: f32 = speed;
-    let bytes = valor.to_le_bytes();
+    let bytes = speed.to_le_bytes();
     let mut envia = create_modbus(CONTROL_VELOCIDADE_WRITE, &bytes);
-    println!("{:?}", bytes);
     match uarto.write(&envia) {
         Ok(bytes_escritos) => {
-            println!("Escritos {} bytes com sucesso!", bytes_escritos);
+
         },
         Err(e) => {
             println!("Erro ao escrever dados: {}", e);
@@ -531,18 +488,20 @@ pub fn velocimetro(speed: f32) {
 
     sleep(Duration::from_millis(50));
 
-    let valor2: f32 = speed;
-    let bytes2 = valor2.to_le_bytes();
-    let mut envia = create_modbus(CONTROL_RPM_WRITE, &bytes2);
-    match uarto.write(&envia) {
-        Ok(bytes_escritos) => {
-            println!("Escritos {} bytes com sucesso!", bytes_escritos);
+    let rpm = speed*8.42;
+    let bytes2 = rpm.to_le_bytes();
+    let mut envia2 = create_modbus(CONTROL_RPM_WRITE, &bytes2);
+    match uarto.write(&envia2) {
+        Ok(bytes_escritos2) => {
+
         },
         Err(e) => {
             println!("Erro ao escrever dados: {}", e);
         },
     }
-    sleep(Duration::from_millis(50));
+    sleep(Duration::from_millis(500));
+
+    println!("Velocidade atual: {}\nRPM: {}", speed, rpm);
 
     drop(uarto);
 }

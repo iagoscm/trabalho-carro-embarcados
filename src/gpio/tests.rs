@@ -9,6 +9,6 @@ mod tests {
 
         let control_signal = pid.compute(setpoint, measured);
 
-        assert!(control_signal > 0.0); // Ensure the output is positive to accelerate
+        assert!(control_signal > 0.0); 
     }
 }

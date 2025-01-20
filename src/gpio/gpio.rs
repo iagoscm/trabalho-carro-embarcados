@@ -1,8 +1,11 @@
 use rppal::gpio::Gpio;
+use rppal::gpio::{OutputPin, InputPin};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use crate::car::control::{ CarControl, CruiseControl, CarState };
 use rppal::pwm::{Channel, Polarity, Pwm};
 use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
 
 pub mod gpio {
   pub const MOTOR_DIR1: u8 = 17;
@@ -68,6 +71,8 @@ pub fn pisca_seta_direita(parar: Arc<Mutex<bool>>) {
       pin.set_low();
       thread::sleep(Duration::from_millis(500));
   }
+
+  
 }
 
 pub fn farol_baixo_liga() {
@@ -110,7 +115,6 @@ pub fn farol_alto_desliga() {
     .into_output_low();
 }
 
-
 pub fn desliga() {
   let gpio = Gpio::new()
     .expect("Erro ao configurar GPIO, o programa está sendo executado em uma raspberry pi?");
@@ -120,30 +124,117 @@ pub fn desliga() {
     .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::FAROL_ALTO).as_str())
     .into_output_low();
 
+  thread::sleep(Duration::from_millis(50));
+
   let mut farol_baixo = gpio   
     .get(gpio::FAROL_BAIXO)
     .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::FAROL_BAIXO).as_str())
     .into_output_low();
+
+  thread::sleep(Duration::from_millis(50));
 
   let mut seta_esquerda = gpio   
     .get(gpio::LUZ_SETA_ESQ)
     .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::LUZ_SETA_ESQ).as_str())
     .into_output_low();
 
+  thread::sleep(Duration::from_millis(50));
+
   let mut seta_direita = gpio   
     .get(gpio::LUZ_SETA_DIR)
     .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::LUZ_SETA_DIR).as_str())
     .into_output_low();
 
-    let mut temp_motor = gpio   
+  thread::sleep(Duration::from_millis(50));
+
+  let mut temp_motor = gpio   
     .get(gpio::LUZ_TEMP_MOTOR)
     .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::LUZ_TEMP_MOTOR).as_str())
     .into_output_low();
 
-    let mut freio = gpio   
+  thread::sleep(Duration::from_millis(50));
+
+  let mut freio = gpio   
     .get(gpio::LUZ_FREIO)
     .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::LUZ_FREIO).as_str())
     .into_output_low();
+
+  thread::sleep(Duration::from_millis(50));
+
+  let mut motor_1 = gpio   
+    .get(gpio::MOTOR_DIR1)
+    .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::MOTOR_DIR1).as_str())
+    .into_output_low();
+
+
+  thread::sleep(Duration::from_millis(50));
+
+
+  let mut motor_2 = gpio   
+    .get(gpio::MOTOR_DIR2)
+    .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::MOTOR_DIR2).as_str())
+    .into_output_low();
+
+  thread::sleep(Duration::from_millis(50));
+
+  let mut pedal_freio = gpio   
+    .get(gpio::PEDAL_FR)
+    .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::PEDAL_FR).as_str())
+    .into_output_low();
+
+  thread::sleep(Duration::from_millis(50));
+
+  let mut acelera = gpio   
+    .get(gpio::PEDAL_AC)
+    .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::PEDAL_AC).as_str())
+    .into_output_low();
+
+  thread::sleep(Duration::from_millis(50));
+
+
+
+}
+
+pub fn pedal(carro: &mut CarControl) {
+  let gpio_lib = Gpio::new().unwrap();
+  let pedal_acelerador = gpio_lib.get(gpio::PEDAL_AC).unwrap().into_input();
+  let pedal_freio = gpio_lib.get(gpio::PEDAL_FR).unwrap().into_input();
+  //let car_state = carro.get_car_state();
+  //todo: implementar lógica de cruise ativo pedal desativado
+
+  if pedal_acelerador.is_high() && pedal_freio.is_high() {
+    let target_speed = 0.0;  
+    carro.brake(target_speed);
+    let mut luz = gpio_lib
+		.get(gpio::LUZ_FREIO)
+		.expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::LUZ_FREIO).as_str())
+		.into_output_high();
+    
+  } else if pedal_acelerador.is_high() && pedal_freio.is_low() {
+    let target_speed = 200.0; 
+    carro.accelerate(target_speed);
+    let mut luz = gpio_lib
+		.get(gpio::LUZ_FREIO)
+		.expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::LUZ_FREIO).as_str())
+		.into_output_low();
+
+  } else if pedal_acelerador.is_low() && pedal_freio.is_high() {
+    let target_speed = 200.0; 
+    carro.reverse(target_speed);
+    let mut luz = gpio_lib
+		.get(gpio::LUZ_FREIO)
+		.expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::LUZ_FREIO).as_str())
+		.into_output_high();
+
+  } else if pedal_acelerador.is_low() && pedal_freio.is_low() { 
+    carro.idle();
+    let mut luz = gpio_lib
+		.get(gpio::LUZ_FREIO)
+		.expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::LUZ_FREIO).as_str())
+		.into_output_low();
+
+  }
+  
 }
 
 pub fn luz_motor() {
@@ -159,15 +250,5 @@ pub fn luz_motor() {
   pin.set_high();
 }
 
-pub fn luz_freio() {
-  let gpio = Gpio::new()
-      .expect("Erro ao configurar GPIO, o programa está sendo executado em uma raspberry pi?");
 
-  let mut pin = gpio
-      .get(gpio::LUZ_FREIO)
-      .expect(format!("Erro ao obter pino {}, talvez esteja ocupado.", gpio::LUZ_FREIO).as_str())
-      .into_output_low();
-
-  pin.set_high();
-}
 
