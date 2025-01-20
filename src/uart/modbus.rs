@@ -214,7 +214,7 @@ pub fn temp_motor(carro: &CarControl) {
     let response = uarto.read(&mut leitura).unwrap();
     let float_value = f32::from_le_bytes(leitura[3..7].try_into().expect("Falha na conversão para f32"));
 
-    if float_value > 114.0 {
+    if float_value >= 115.0 {
         gpio::luz_motor();
 	    car_state.temp_alert = true;
     }
