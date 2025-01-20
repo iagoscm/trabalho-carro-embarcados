@@ -27,7 +27,7 @@ Este projeto visa aplicar os conceitos fundamentais de sistemas embarcados no de
 > **IMPORTANTE**: Para executar o binário na raspberry pi, é necessário que o binário tenha permissão de execução. Caso não tenha, execute o comando `chmod 744 <nome_do_binario>`.
 
 ## Vídeo de apresentação
-- Demonstração da compilação e das funcionalidades: [Acessar vídeo](youtube.com/https://youtu.be/yWmDa_7iGsY)
+- Demonstração da compilação e das funcionalidades: [Acessar vídeo](https://youtu.be/yWmDa_7iGsY)
 
 ## Experimento
 
