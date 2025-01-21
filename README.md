@@ -2,6 +2,8 @@
 
 # Sistema de Controle Automotivo - Trabalho 2 - 2024/2
 
+> Foi feito um commit para retirar arquivos antes da entrega, mas deixamos a importação dele no main.rs impedindo de buildar, comunicando ao professor recebemos a autorização para retirar o import após o horário limite
+
 ## Objetivo
 Este projeto visa aplicar os conceitos fundamentais de sistemas embarcados no desenvolvimento de um sistema de controle para automóveis. O sistema gerencia o funcionamento de diversos componentes eletrônicos, como motor, pedais, faróis, setas de direção, e o controle de velocidade (cruise control). A comunicação entre módulos é feita por meio de GPIO, PWM, I2C, e MODBUS via UART. O trabalho foi feito em rust e testado em uma Rasp Pi com uma configuração específica para o trabalho. 
 
