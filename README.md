@@ -24,10 +24,10 @@ Este projeto visa aplicar os conceitos fundamentais de sistemas embarcados no de
 - O binário vai estar na pasta target/armv7-unknown-linux-musleabihf/release, envie o binário para a raspberry pi (scp);
 - Execute o binário na raspberry pi.
 
-> **IMPORTANTE**: Para executar o binário na raspberry pi, é necessário que o binário tenha permissão de execução. Caso não tenha, execute o comando `chmod 744 <nome_do_binario>`.
+**Obs.:** Para executar o binário na raspberry pi, é necessário que o usuário tenha permissão de execução. Caso não possua a permissão, tente executar o comando `chmod 744 <nome_do_binario>`.
 
 ## Vídeo de apresentação
-- Demonstração da compilação e das funcionalidades: [Acessar vídeo](https://youtu.be/yWmDa_7iGsY)
+- Demonstração da compilação e das funcionalidades: [Acessar vídeo](https://youtu.be/r2Wu2QsO7h4)
 
 ## Experimento
 
